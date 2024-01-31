@@ -1,0 +1,36 @@
+# Misc
+*.pyc
+*/debug.py
+*/tutorial.py
+code/utils/keychain.py
+
+# Data
+data/*/*
+*/data
+
+*.mid
+*.wav
+
+*.npy
+*.npz
+*.hi
+
+*.json
+*.jsonl
+*.csv
+
+*.jpg
+*.png
+*.pdf
+
+*.zip
+
+# Model checkpoints
+*.pt
+*.bin
+*.ckpt
+results/runs/*/*
+
+# sh
+*.err
+*.out
