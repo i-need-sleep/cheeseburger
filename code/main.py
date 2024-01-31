@@ -106,7 +106,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint', default=None, type=str)
 
     # Training: Spectrogram_RVQVAE
-    parser.add_argument('--commit_loss_weight', default=1, type=int)
+    parser.add_argument('--commit_loss_weight', default=1, type=float)
 
     # Prediction
     parser.add_argument('--n_predictions', default=10, type=int)
