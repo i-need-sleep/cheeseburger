@@ -64,7 +64,7 @@ def main(args):
         logger=logger,
         deterministic=not args.nondeterministic,
         num_sanity_val_steps=2,
-        # enable_progress_bar=args.debug,
+        enable_progress_bar=args.debug,
         log_every_n_steps=1,
         fast_dev_run=5 if args.debug else False,
         callbacks=[checkpoint_callback]
