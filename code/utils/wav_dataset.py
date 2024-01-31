@@ -59,7 +59,10 @@ def wav_collate(batch):
         'names': names
     }
     
-def make_wav_loader(midi_path, wav_dir, batch_size, sr, shuffle=True, debug=False):
+def make_wav_loader(midi_path, wav_dir, batch_size, sr, shuffle=True, debug=False, single_worker=False):
     dataset = WAVDataset(midi_path, wav_dir, sr, debug=debug)
-    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=wav_collate, num_workers=uglobals.NUM_WORKERS, persistent_workers=True)
+    if single_worker:
+        loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=wav_collate)
+    else:
+        loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=wav_collate, num_workers=uglobals.NUM_WORKERS, persistent_workers=True)
     return loader

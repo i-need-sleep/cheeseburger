@@ -49,9 +49,9 @@ def main(args):
     # This should be the only place to change when we add new tasks/models
     if args.task == 'spectrogram_rvqvae':
         sr = 16000
-        train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True)
-        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False)
-        test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False)
+        train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker)
+        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         model = Spectorgram_RVQVAE(vars(args), sr=sr)
     else:
         raise NotImplementedError
@@ -67,15 +67,16 @@ def main(args):
         enable_progress_bar=args.debug,
         log_every_n_steps=1,
         fast_dev_run=5 if args.debug else False,
-        callbacks=[checkpoint_callback]
+        callbacks=[checkpoint_callback],
+        inference_mode=False if (args.task=='spectrogram_rvqvae' and args.mode=='predict_dev') else True # Enable grad for reverse mel spectrogram transforms
     )
 
     if args.mode == 'train':
         trainer.fit(model, train_loader, dev_loader, ckpt_path=args.checkpoint)
     elif args.mode == 'test':
         trainer.test(model, dataloaders=test_loader, ckpt_path=args.checkpoint)
-    elif args.mode == 'predict':
-        trainer.predict(model, dataloaders=test_loader, ckpt_path=args.checkpoint, return_predictions=False)
+    elif args.mode == 'predict_dev':
+        trainer.predict(model, dataloaders=dev_loader, ckpt_path=args.checkpoint, return_predictions=False)
     else:
         raise NotImplementedError
     
@@ -91,10 +92,11 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--force_cpu', action='store_true')
     parser.add_argument('--nondeterministic', action='store_true')
+    parser.add_argument('--single_worker', action='store_true')
     
     # Formulation
     parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae'])
-    parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'predict'])
+    parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'predict_dev'])
 
     # Training
     parser.add_argument('--batch_size', default=64, type=int)
@@ -103,22 +105,26 @@ if __name__ == '__main__':
     parser.add_argument('--eval_n_epoch', default=1, type=int)
     parser.add_argument('--checkpoint', default=None, type=str)
 
+    # Training: Spectrogram_RVQVAE
+    parser.add_argument('--commit_loss_weight', default=1, type=int)
+
     # Prediction
-    parser.add_argument('--n_predictions', default=21, type=int)
+    parser.add_argument('--n_predictions', default=10, type=int)
 
     args = parser.parse_args()
     args.uglobals = logging_utils.module_to_dict(uglobals)
 
     if args.debug:
-        args.name = 'debug'
+        args.name = 'train_rvqvae_3e-4'
         args.debug = False
+        args.single_worker = True
 
         args.task = 'spectrogram_rvqvae'
         
-        args.batch_size = 32
+        args.batch_size = 16
         args.max_n_epochs = 20
 
-        # args.mode = 'predict'
-        # args.checkpoint = '../results/runs/placeholder/debug/checkpoints/epoch=19-step=4700.ckpt'
+        args.mode = 'predict_dev'
+        args.checkpoint = '../results/runs/spectrogram_rvqvae/train_rvqvae_3e-4/checkpoints/epoch=3-step=1888.ckpt'
 
     main(args)

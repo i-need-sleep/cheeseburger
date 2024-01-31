@@ -1,6 +1,7 @@
 from pathlib import Path
 from copy import deepcopy
 
+from scipy.io.wavfile import write as wav_write
 import torch, torchvision, torchaudio
 import lightning
 import vector_quantize_pytorch
@@ -11,6 +12,7 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
     def __init__(self, args, sr):
         super().__init__()
         self.args = args
+        self.sr = sr
         self.save_hyperparameters(args, sr)
 
         # Transformations
@@ -119,8 +121,8 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
         x = x.reshape(x.shape[0] * x.shape[1], 1, x.shape[2], x.shape[3]) # Merge the batch and seq_len dimensions, and add a channel dimension
         return x
 
-    def postprocess(self, x):
-        x = x.reshape(-1, self.args['seq_len'], 128, 16) # Split the batch and seq_len dimensions
+    def postprocess(self, x, batch_size):
+        x = x.reshape(batch_size, -1, 128, 16) # Split the batch and seq_len dimensions
         x = (x * self.args['uglobals']['SPECTORGRAM_STD']) + self.args['uglobals']['SPECTORGRAM_MEAN'] # Denormalize
         x = torch.pow(10, x / 10) - 1e-6 # Inverse log scale
         x = self.invers_transform(x) # Mel spectrogram to wav
@@ -148,6 +150,7 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
         y = deepcopy(x)
         y_hat, _, _, commit_loss = self.forward(x)
         recons_loss = torch.nn.functional.mse_loss(y_hat, y)
+        commit = self.args['commit_loss_weight'] * commit_loss
         loss = recons_loss + commit_loss
 
         self.log("train/loss", loss, batch_size=batch_size)
@@ -187,15 +190,27 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.args['lr'])
         return optimizer
     
+    @torch.enable_grad() 
     def predict_step(self, batch, batch_idx):
-        # x, _ = batch
-        # x_hat, commit_loss = self.forward(x)
+        if self.output_idx >= self.args['n_predictions']:
+            return
+        x = batch['wav']
+        names = batch['names']
+        batch_size = x.shape[0]
+        x_original = deepcopy(x).reshape(batch_size, -1) # Original wav
+        x = self.preprocess(x)
+        x_processed = deepcopy(x) # Mel spectrogram
+        x_recons, _, _, c = self.forward(x)
         
-        # # Save the predictions/GT
-        # for i in range(x.shape[0]):
-        #     torchvision.utils.save_image(x[i], f'{self.output_folder}/{self.output_idx}_gt.png')
-        #     torchvision.utils.save_image(x_hat[i], f'{self.output_folder}/{self.output_idx}_pred.png')
-        #     self.output_idx += 1
-        #     if self.output_idx >= self.args['n_predictions']:
-        #         return
+        x_processed = self.postprocess(x_processed, batch_size).reshape(batch_size, -1)
+        x_recons = self.postprocess(x_recons.detach(), batch_size).reshape(batch_size, -1)
+
+        for i, name in enumerate(names):
+            wav_write(f'{self.output_folder}/{name}_original.wav', self.sr, x_original[i].cpu().numpy())
+            wav_write(f'{self.output_folder}/{name}_processed.wav',  self.sr, x_processed[i].cpu().numpy())
+            wav_write(f'{self.output_folder}/{name}_recons.wav',  self.sr, x_recons[i].cpu().numpy())
+            self.output_idx += 1
+        
+            if self.output_idx >= self.args['n_predictions']:
+                return
         return 
