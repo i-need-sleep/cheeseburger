@@ -8,10 +8,10 @@ import lightning
 import torchvision
 
 import utils.globals as uglobals
-import utils.data_utils as data_utils
 import utils.logging_utils as logging_utils
+from utils.wav_dataset import make_wav_loader
 
-from models.placeholder_model import PlaceholderModel
+from models.spectogram_rvqvae import Spectorgram_RVQVAE
 
 def main(args):
     # Seeding
@@ -47,15 +47,12 @@ def main(args):
 
     # Create model and data loaders
     # This should be the only place to change when we add new tasks/models
-    if args.task == 'placeholder':
-        transform = torchvision.transforms.ToTensor()
-        train_set = torchvision.datasets.MNIST(root=f'{uglobals.DATA_DIR}/minst', download=True, train=True, transform=transform)
-        dev_set = torchvision.datasets.MNIST(root=f'{uglobals.DATA_DIR}/minst', download=True, train=False, transform=transform)
-
-        train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=19, persistent_workers=True)
-        dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=args.batch_size, shuffle=False, num_workers=19, persistent_workers=True)
-        test_loader = dev_loader
-        model = PlaceholderModel(vars(args))
+    if args.task == 'spectrogram_rvqvae':
+        sr = 16000
+        train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True)
+        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False)
+        test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False)
+        model = Spectorgram_RVQVAE(vars(args), sr=sr)
     else:
         raise NotImplementedError
     
@@ -81,7 +78,7 @@ def main(args):
         trainer.predict(model, dataloaders=test_loader, ckpt_path=args.checkpoint, return_predictions=False)
     else:
         raise NotImplementedError
-
+    
     return
 
 
@@ -96,11 +93,11 @@ if __name__ == '__main__':
     parser.add_argument('--nondeterministic', action='store_true')
     
     # Formulation
-    parser.add_argument('--task', type=str, default=None, choices=['placeholder'])
+    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae'])
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'predict'])
 
     # Training
-    parser.add_argument('--batch_size', default=256, type=int)
+    parser.add_argument('--batch_size', default=64, type=int)
     parser.add_argument('--lr', default=3e-4, type=float)
     parser.add_argument('--max_n_epochs', default=-1, type=int)
     parser.add_argument('--eval_n_epoch', default=1, type=int)
@@ -116,12 +113,12 @@ if __name__ == '__main__':
         args.name = 'debug'
         args.debug = False
 
-        args.task = 'placeholder'
+        args.task = 'spectrogram_rvqvae'
         
-        # args.batch_size = 32
+        args.batch_size = 32
         args.max_n_epochs = 20
 
-        args.mode = 'predict'
-        args.checkpoint = '../results/runs/placeholder/debug/checkpoints/epoch=19-step=4700.ckpt'
+        # args.mode = 'predict'
+        # args.checkpoint = '../results/runs/placeholder/debug/checkpoints/epoch=19-step=4700.ckpt'
 
     main(args)

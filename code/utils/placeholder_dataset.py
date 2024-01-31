@@ -2,6 +2,7 @@ import torch
 
 import utils.globals as uglobals
 
+# Placeholder dataset
 class PlaceholderDataset(torch.utils.data.Dataset):
     def __init__(self):
         self.data = self.gen_data()

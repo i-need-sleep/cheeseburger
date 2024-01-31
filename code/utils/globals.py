@@ -5,6 +5,18 @@ SEED = 21
 DATA_DIR = '../data'
 NUM_WORKERS = 19
 
+# Data: Scales 16k
+TOY_16K_DIR = f'{DATA_DIR}/scales_16k'
+TOY_16K_MIDI_PROTOTYPES_DIR = f'{TOY_16K_DIR}/midi_prototypes'
+TOY_16K_MIDI_AUGMENTED_DIR = f'{TOY_16K_DIR}/midi_augmented'
+TOY_16K_WAV_DIR = f'{TOY_16K_DIR}/wav'
+TOY_16K_TRAINING_DIR = f'{TOY_16K_DIR}/training'
+SPECTORGRAM_MEAN = -13.628715515136719
+SPECTORGRAM_STD = 18.850406646728516
+
+# Data: MelSpectrogram
+N_FFT = 1024
+
 # Results
 RESULTS_DIR = '../results'
 OUTPUTS_DIR = f'{RESULTS_DIR}/outputs'
