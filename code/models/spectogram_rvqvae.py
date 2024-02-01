@@ -150,7 +150,7 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
         y = deepcopy(x)
         y_hat, _, _, commit_loss = self.forward(x)
         recons_loss = torch.nn.functional.mse_loss(y_hat, y)
-        commit = self.args['commit_loss_weight'] * commit_loss
+        commit_loss = self.args['commit_loss_weight'] * commit_loss
         loss = recons_loss + commit_loss
 
         self.log("train/loss", loss, batch_size=batch_size)
