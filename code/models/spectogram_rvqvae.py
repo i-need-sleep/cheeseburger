@@ -61,10 +61,12 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
             ),
             torch.nn.Conv2d(16, 768, kernel_size=(128, 16)),
         )
+        self.codebook_size = 1024
+        self.n_quantizers = 8
         self.rvq = vector_quantize_pytorch.ResidualVQ(
             dim = 768,
-            num_quantizers = 8,
-            codebook_size = 1024,
+            num_quantizers = self.n_quantizers,
+            codebook_size = self.codebook_size,
             stochastic_sample_codes = True,
             sample_codebook_temp = 0.1,
             shared_codebook = True
@@ -111,7 +113,8 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
 
         # Initialize the output folder
         self.output_folder = f'{args["uglobals"]["OUTPUTS_DIR"]}/{args["task"]}/{args["name"]}'
-        Path(self.output_folder).mkdir(parents=True, exist_ok=True)
+        if args['mode'] == 'predict_dev':
+            Path(self.output_folder).mkdir(parents=True, exist_ok=True)
         self.output_idx = 0 # For indicing predictions
 
     def preprocess(self, x):
@@ -147,6 +150,13 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
         quantized, indices, commit_loss = self.rvq(x)
         # [batch_size, seq_len, 768], [batch_size, seq_len, n_quantizers], [batch_size, n_quantizers]
         return quantized, indices, commit_loss
+    
+    def decode_from_indices(self, indices, batch_size):
+        # [batch_size * seq_len, n_quantizers]
+        codes = self.rvq.get_output_from_indices(indices).unsqueeze(-1).unsqueeze(-1)
+        x_hat = self.decoder(codes)
+        x_hat = x_hat.reshape(batch_size, -1, x_hat.shape[2], x_hat.shape[3])
+        return x_hat
 
     def training_step(self, batch, batch_idx):
         x = batch['wav']

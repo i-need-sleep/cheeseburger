@@ -72,11 +72,13 @@ def main(args):
         logger=logger,
         deterministic=not args.nondeterministic,
         num_sanity_val_steps=2,
-        enable_progress_bar=args.debug,
+        enable_progress_bar=args.single_worker,
         log_every_n_steps=1,
-        fast_dev_run=5 if args.debug else False,
         callbacks=[checkpoint_callback],
-        inference_mode=False if (args.task=='spectrogram_rvqvae' and args.mode=='predict_dev') else True # Enable grad for reverse mel spectrogram transforms
+        inference_mode=False if (args.task=='spectrogram_rvqvae' and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
+        limit_train_batches=3 if args.debug else 1.0,
+        limit_val_batches=3 if args.debug else 1.0,
+        limit_test_batches=3 if args.debug else 1.0,
     )
 
     if args.mode == 'train':
@@ -127,14 +129,13 @@ if __name__ == '__main__':
 
     if args.debug:
         args.name = 'debug'
-        args.debug = True
         args.single_worker = True
 
         args.task = 'audio_lm'
         args.mode = 'train'
         
         args.batch_size = 16
-        args.max_n_epochs = 20
+        args.max_n_epochs = 3
 
         args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/train_vqvae_3e-4/checkpoints/epoch=3-step=1888.ckpt'
 
