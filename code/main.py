@@ -12,6 +12,7 @@ import utils.logging_utils as logging_utils
 from utils.wav_dataset import make_wav_loader
 
 from models.spectogram_rvqvae import Spectorgram_RVQVAE
+from models.audio_lm import AudioLM
 
 def main(args):
     # Seeding
@@ -38,6 +39,7 @@ def main(args):
     )
     checkpoint_callback = lightning.pytorch.callbacks.ModelCheckpoint(
         dirpath=f'{logger_dir}/{args.name}/checkpoints',
+        save_last=True,
         save_top_k=1,
         monitor='val/loss'
     )
@@ -53,6 +55,12 @@ def main(args):
         dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         model = Spectorgram_RVQVAE(vars(args), sr=sr)
+    elif args.task == 'audio_lm':
+        sr = 16000
+        train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker)
+        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        model = AudioLM(vars(args))
     else:
         raise NotImplementedError
     
@@ -95,7 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--single_worker', action='store_true')
     
     # Formulation
-    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae'])
+    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm'])
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'predict_dev'])
 
     # Training
@@ -108,6 +116,9 @@ if __name__ == '__main__':
     # Training: Spectrogram_RVQVAE
     parser.add_argument('--commit_loss_weight', default=1, type=float)
 
+    # Training: Audio_LM
+    parser.add_argument('--rvqvae_checkpoint', default='', type=str)
+
     # Prediction
     parser.add_argument('--n_predictions', default=10, type=int)
 
@@ -115,16 +126,16 @@ if __name__ == '__main__':
     args.uglobals = logging_utils.module_to_dict(uglobals)
 
     if args.debug:
-        args.name = 'train_rvqvae_3e-4'
-        args.debug = False
+        args.name = 'debug'
+        args.debug = True
         args.single_worker = True
 
-        args.task = 'spectrogram_rvqvae'
+        args.task = 'audio_lm'
+        args.mode = 'train'
         
         args.batch_size = 16
         args.max_n_epochs = 20
 
-        args.mode = 'predict_dev'
-        args.checkpoint = '../results/runs/spectrogram_rvqvae/train_rvqvae_3e-4/checkpoints/epoch=3-step=1888.ckpt'
+        args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/train_vqvae_3e-4/checkpoints/epoch=3-step=1888.ckpt'
 
     main(args)

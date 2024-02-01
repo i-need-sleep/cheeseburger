@@ -13,7 +13,7 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
         super().__init__()
         self.args = args
         self.sr = sr
-        self.save_hyperparameters(args, sr)
+        self.save_hyperparameters()
 
         # Transformations
         n_fft = self.args['uglobals']['N_FFT']
@@ -130,11 +130,7 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
         return x
 
     def forward(self, x):
-        # [batch_size, seq_len, 128, 16]
-        x = self.encoder(x)
-        x = torch.squeeze(x)
-
-        quantized, indices, commit_loss = self.rvq(x)
+        quantized, indices, commit_loss = self.encode_and_quantize(x)
         # [batch_size, seq_len, 768], [batch_size, seq_len, n_quantizers], [batch_size, n_quantizers]
         commit_loss = torch.mean(commit_loss)
         
@@ -142,6 +138,15 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
         x_hat = self.decoder(quantized)
         
         return x_hat, quantized, indices, commit_loss
+    
+    def encode_and_quantize(self, x):
+        # [batch_size, seq_len, 128, 16]
+        x = self.encoder(x)
+        x = torch.squeeze(x)
+
+        quantized, indices, commit_loss = self.rvq(x)
+        # [batch_size, seq_len, 768], [batch_size, seq_len, n_quantizers], [batch_size, n_quantizers]
+        return quantized, indices, commit_loss
 
     def training_step(self, batch, batch_idx):
         x = batch['wav']
