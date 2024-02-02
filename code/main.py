@@ -44,6 +44,13 @@ def main(args):
         monitor='val/loss'
     )
 
+    # Resume from the last checkpoint
+    if not args.force_restart_training and args.checkpoint is None:
+        last_checkpoint = f'{logger_dir}/{args.name}/checkpoints/last.ckpt'
+        if os.path.exists(last_checkpoint):
+            args.checkpoint = last_checkpoint
+            print(f'Resuming from the last checkpoint: {args.checkpoint}')
+            
     # Print and save args
     logging_utils.print_and_save_args_uglobals(args, logger)
 
@@ -101,6 +108,7 @@ if __name__ == '__main__':
     parser.add_argument('--name', type=str, default='unnamed')
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--force_cpu', action='store_true')
+    parser.add_argument('--force_restart_training', action='store_true') # Otherwise, automatically resume the last checkpoint
     parser.add_argument('--nondeterministic', action='store_true')
     parser.add_argument('--single_worker', action='store_true')
     
