@@ -4,7 +4,7 @@ SEED = 21
 # Data
 DATA_DIR = '../data'
 NUM_WORKERS = 19
-TMP_DIR = f'{DATA_DIR}/tmp'
+TEMP_DIR = f'{DATA_DIR}/tmp'
 
 # Data: Scales 16k
 TOY_16K_DIR = f'{DATA_DIR}/scales_16k'

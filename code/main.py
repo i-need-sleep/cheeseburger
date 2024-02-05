@@ -57,7 +57,7 @@ def main(args):
             
     # Print and save args
     logging_utils.print_and_save_args_uglobals(args, logger)
-
+    
     # Create model and data loaders
     # This should be the only place to change when we add new tasks/models
     if args.task == 'spectrogram_rvqvae':
@@ -84,7 +84,7 @@ def main(args):
         deterministic=not args.nondeterministic,
         num_sanity_val_steps=2,
         enable_progress_bar=args.single_worker,
-        log_every_n_steps=1,
+        log_every_n_steps=len(train_loader)//10, # Log 10 times per epoch
         callbacks=[checkpoint_callback],
         inference_mode=False if (args.task=='spectrogram_rvqvae' and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
         limit_train_batches=3 if args.debug else 1.0,
@@ -144,12 +144,12 @@ if __name__ == '__main__':
         args.name = 'debug'
         args.single_worker = True
 
-        args.task = 'audio_lm'
-        args.mode = 'train'
+        args.task = 'spectrogram_rvqvae'
+        # args.mode = 'train'
         
-        args.batch_size = 16
-        args.max_n_epochs = 3
+        # args.batch_size = 16
+        # args.max_n_epochs = 3
 
-        args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/train_vqvae_3e-4/checkpoints/epoch=3-step=1888.ckpt'
+        # args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/train_vqvae_3e-4/checkpoints/epoch=3-step=1888.ckpt'
 
     main(args)
