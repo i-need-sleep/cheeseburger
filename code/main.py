@@ -2,6 +2,7 @@ import os
 import datetime
 import argparse
 import random
+import tempfile
 
 import torch
 import lightning
@@ -15,6 +16,9 @@ from models.spectogram_rvqvae import Spectorgram_RVQVAE
 from models.audio_lm import AudioLM
 
 def main(args):
+    # The default temp dir is does not work on the cluster
+    tempfile.tempdir = uglobals.TEMP_DIR
+
     # Seeding
     if not args.nondeterministic:
         lightning.seed_everything(uglobals.SEED)
