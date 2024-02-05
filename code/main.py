@@ -132,6 +132,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_quantizers', default=8, type=int)
 
     # Training: Audio_LM
+    parser.add_argument('--lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])
     parser.add_argument('--rvqvae_checkpoint', default='', type=str)
 
     # Prediction

@@ -25,7 +25,7 @@ class AudioLM(lightning.LightningModule):
 
     def get_gpt_config(self):
         # Modify the config of a distill-gpt2 model
-        config = transformers.AutoConfig.from_pretrained('distilgpt2')
+        config = transformers.AutoConfig.from_pretrained(self.args['gpt_config'])
         return config
     
     def configure_optimizers(self):
