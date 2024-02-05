@@ -62,7 +62,7 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
             torch.nn.Conv2d(16, 768, kernel_size=(128, 16)),
         )
         self.codebook_size = 1024
-        self.n_quantizers = 8
+        self.n_quantizers = self.args['n_quantizers']
         self.rvq = vector_quantize_pytorch.ResidualVQ(
             dim = 768,
             num_quantizers = self.n_quantizers,

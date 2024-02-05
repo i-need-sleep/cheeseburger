@@ -125,6 +125,7 @@ if __name__ == '__main__':
 
     # Training: Spectrogram_RVQVAE
     parser.add_argument('--commit_loss_weight', default=1, type=float)
+    parser.add_argument('--n_quantizers', default=8, type=int)
 
     # Training: Audio_LM
     parser.add_argument('--rvqvae_checkpoint', default='', type=str)
