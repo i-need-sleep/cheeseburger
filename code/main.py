@@ -145,12 +145,14 @@ if __name__ == '__main__':
         args.name = 'debug'
         args.single_worker = True
 
-        args.task = 'spectrogram_rvqvae'
-        # args.mode = 'train'
+        args.task = 'audio_lm'
+        args.mode = 'train'
         
-        # args.batch_size = 16
-        # args.max_n_epochs = 3
+        args.batch_size = 16
+        args.max_n_epochs = 3
 
-        # args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/train_vqvae_3e-4/checkpoints/epoch=3-step=1888.ckpt'
+        args.lm_config = 'gpt2'
+
+        args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/train_vqvae_3e-4/checkpoints/epoch=3-step=1888.ckpt'
 
     main(args)
