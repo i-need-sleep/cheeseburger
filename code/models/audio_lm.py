@@ -22,6 +22,11 @@ class AudioLM(lightning.LightningModule):
         self.gpt = transformers.AutoModel.from_config(self.gpt_config)
         self.bos_emb = torch.nn.Embedding(1, self.gpt_config.n_embd)
         self.cls = torch.nn.Linear(self.gpt_config.n_embd, self.rvqvae.codebook_size * self.rvqvae.n_quantizers)
+        
+        # Projecting the quantized code to the LM inputs if they are of different sizes
+        self.input_proj = None
+        if self.rvqvae.codebook_dim != self.gpt_config.n_embd:
+            self.input_proj = torch.nn.Linear(self.rvqvae.codebook_dim, self.gpt_config.n_embd)
 
     def get_gpt_config(self):
         # Modify the config of a distill-gpt2 model
@@ -29,7 +34,10 @@ class AudioLM(lightning.LightningModule):
         return config
     
     def configure_optimizers(self):
-        params_to_update = itertools.chain(self.gpt.parameters(), self.bos_emb.parameters(), self.cls.parameters()) # The RVQVAE is frozen
+        if self.input_proj is not None:
+            params_to_update = itertools.chain(self.gpt.parameters(), self.bos_emb.parameters(), self.cls.parameters(), self.input_proj.parameters()) # The RVQVAE is frozen
+        else:
+            params_to_update = itertools.chain(self.gpt.parameters(), self.bos_emb.parameters(), self.cls.parameters()) 
         optimizer = torch.optim.Adam(params_to_update, lr=self.args['lr'])
         return optimizer
     
@@ -49,6 +57,10 @@ class AudioLM(lightning.LightningModule):
         quantized, tokens, spectrogram = self.batch_to_tokens(batch)
         # quantized: [batch_size, seq_len, emb_size]
         # tokens: [batch_size, seq_len, n_quantizers]
+        if self.input_proj is not None:
+            # Project the quantized code to the LM inputs if they are of different sizes
+            quantized = self.input_proj(quantized)
+
         embs = self.get_bos_emb(quantized.shape[0])
         embs = torch.cat([embs, quantized], dim=1)
         

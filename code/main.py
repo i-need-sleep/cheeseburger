@@ -151,8 +151,8 @@ if __name__ == '__main__':
         args.batch_size = 16
         args.max_n_epochs = 3
 
-        args.lm_config = 'gpt2'
+        args.lm_config = 'gpt2-medium'
 
-        args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/train_vqvae_3e-4/checkpoints/epoch=3-step=1888.ckpt'
+        args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/quantizer6_epoch=12-step=6136.ckpt'
 
     main(args)
