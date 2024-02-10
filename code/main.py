@@ -1,12 +1,10 @@
 import os
 import datetime
 import argparse
-import random
 import tempfile
 
 import torch
 import lightning
-import torchvision
 
 import utils.globals as uglobals
 import utils.logging_utils as logging_utils
@@ -15,6 +13,7 @@ from utils.wav_dataset import make_wav_loader
 from models.spectogram_rvqvae import Spectorgram_RVQVAE
 from models.audio_lm import AudioLM
 from models.cascading_audio_lm import CascadingAudioLM
+from models.deterministic_cheeseburger import Deterministic_Cheeseburger
 
 def main(args):
     # The default temp dir is does not work on the cluster
@@ -78,7 +77,13 @@ def main(args):
         train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker)
         dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
-        model = CascadingAudioLM(vars(args))
+        model = CascadingAudioLM(vars(args))    
+    elif args.task == 'det_cheeseburger':
+        sr = 16000
+        train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker)
+        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        model = Deterministic_Cheeseburger(vars(args))
     else:
         raise NotImplementedError
     
@@ -91,7 +96,7 @@ def main(args):
         deterministic=not args.nondeterministic,
         num_sanity_val_steps=2,
         enable_progress_bar=args.single_worker,
-        log_every_n_steps=len(train_loader)//10, # Log 10 times per epoch
+        log_every_n_steps=len(train_loader)//10 if not args.debug else 1, # Log 10 times per epoch
         callbacks=[checkpoint_callback],
         inference_mode=False if (args.task=='spectrogram_rvqvae' and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
         limit_train_batches=3 if args.debug else 1.0,
@@ -124,7 +129,7 @@ if __name__ == '__main__':
     parser.add_argument('--single_worker', action='store_true')
     
     # Formulation
-    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm'])
+    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm', 'det_cheeseburger'])
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'predict_dev'])
 
     # Training
@@ -145,6 +150,12 @@ if __name__ == '__main__':
     # Training: Cascading_Audio_LM
     parser.add_argument('--downstream_lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])
 
+    # Training: Deterministic Cheeseburger
+    parser.add_argument('--det_cheese_wav_lm_checkpoint', default='../pretrained/deterministic/det_wav_lm.bin', type=str)
+    parser.add_argument('--det_cheese_spectrogram_ae_checkpoint', default='../pretrained/deterministic/linear_ae.bin', type=str)
+    parser.add_argument('--det_cheese_pitch_lm_checkpoint', default='../pretrained/deterministic/pitch_lm.bin', type=str)
+    parser.add_argument('--det_cheese_insertion_layer', default=3, type=int)
+
     # Prediction
     parser.add_argument('--n_predictions', default=10, type=int)
 
@@ -155,14 +166,10 @@ if __name__ == '__main__':
         args.name = 'debug'
         args.single_worker = True
 
-        args.task = 'cascade_audio_lm'
+        args.task = 'det_cheeseburger'
         args.mode = 'train'
         
         args.batch_size = 16
         args.max_n_epochs = 3
-
-        args.lm_config = 'distilgpt2'
-
-        args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/quantizer6_epoch=12-step=6136.ckpt'
 
     main(args)
