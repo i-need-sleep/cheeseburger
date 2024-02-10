@@ -14,6 +14,7 @@ from utils.wav_dataset import make_wav_loader
 
 from models.spectogram_rvqvae import Spectorgram_RVQVAE
 from models.audio_lm import AudioLM
+from models.cascading_audio_lm import CascadingAudioLM
 
 def main(args):
     # The default temp dir is does not work on the cluster
@@ -72,6 +73,12 @@ def main(args):
         dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         model = AudioLM(vars(args))
+    elif args.task == 'cascade_audio_lm':
+        sr = 16000
+        train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker)
+        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        model = CascadingAudioLM(vars(args))
     else:
         raise NotImplementedError
     
@@ -117,7 +124,7 @@ if __name__ == '__main__':
     parser.add_argument('--single_worker', action='store_true')
     
     # Formulation
-    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm'])
+    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm'])
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'predict_dev'])
 
     # Training
@@ -135,6 +142,9 @@ if __name__ == '__main__':
     parser.add_argument('--lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])
     parser.add_argument('--rvqvae_checkpoint', default='', type=str)
 
+    # Training: Cascading_Audio_LM
+    parser.add_argument('--downstream_lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])
+
     # Prediction
     parser.add_argument('--n_predictions', default=10, type=int)
 
@@ -145,13 +155,13 @@ if __name__ == '__main__':
         args.name = 'debug'
         args.single_worker = True
 
-        args.task = 'audio_lm'
+        args.task = 'cascade_audio_lm'
         args.mode = 'train'
         
         args.batch_size = 16
         args.max_n_epochs = 3
 
-        args.lm_config = 'gpt2-medium'
+        args.lm_config = 'distilgpt2'
 
         args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/quantizer6_epoch=12-step=6136.ckpt'
 

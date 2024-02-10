@@ -8,7 +8,7 @@ import transformers
 
 from models.spectogram_rvqvae import Spectorgram_RVQVAE
 
-class AudioLM(lightning.LightningModule):
+class CascadingAudioLM(lightning.LightningModule):
     def __init__(self, args):
         super().__init__()
         self.args = args
@@ -20,23 +20,38 @@ class AudioLM(lightning.LightningModule):
         self.rvqvae.freeze()
         self.gpt_config = self.get_gpt_config()
         self.gpt = transformers.AutoModel.from_config(self.gpt_config)
+        self.downstream_gpt_config = self.get_downstream_gpt_config()
+        self.downstream_gpt = transformers.AutoModel.from_config(self.downstream_gpt_config)
         self.bos_emb = torch.nn.Embedding(1, self.gpt_config.n_embd)
-        self.cls = torch.nn.Linear(self.gpt_config.n_embd, self.rvqvae.codebook_size * self.rvqvae.n_quantizers)
+        self.downstream_token_emb = torch.nn.Embedding(self.rvqvae.codebook_size, self.downstream_gpt_config.n_embd)
+        self.cls = torch.nn.Linear(self.downstream_gpt_config.n_embd, self.rvqvae.codebook_size)
         
         # Projecting the quantized code to the LM inputs if they are of different sizes
         self.input_proj = None
         if self.rvqvae.codebook_dim != self.gpt_config.n_embd:
             self.input_proj = torch.nn.Linear(self.rvqvae.codebook_dim, self.gpt_config.n_embd)
 
+        # Projecting the LM outputs to the downstream LM inputs if they are of different sizes
+        self.downstream_input_proj = None
+        if self.gpt_config.n_embd != self.downstream_gpt_config.n_embd:
+            self.downstream_input_proj = torch.nn.Linear(self.gpt_config.n_embd, self.downstream_gpt_config.n_embd)
+
     def get_gpt_config(self):
         # Modify the config of a distill-gpt2 model
         config = transformers.AutoConfig.from_pretrained(self.args['lm_config'])
         return config
+
+    def get_downstream_gpt_config(self):
+        # Modify the config of a distill-gpt2 model
+        config = transformers.AutoConfig.from_pretrained(self.args['downstream_lm_config'])
+        return config
     
     def configure_optimizers(self):
-        params = [self.gpt.parameters(), self.bos_emb.parameters(), self.cls.parameters()] # The RVQVAE is frozen
+        params = [self.gpt.parameters(), self.downstream_gpt.parameters(), self.bos_emb.parameters(), self.cls.parameters(), self.downstream_token_emb.parameters()] # The RVQVAE is frozen
         if self.input_proj is not None:
-            params.append(self.input_proj.parameters()) 
+            params.append(self.input_proj.parameters())
+        if self.downstream_input_proj is not None:
+            params.append(self.downstream_input_proj.parameters())
         params_to_update = itertools.chain(*params)
         optimizer = torch.optim.Adam(params_to_update, lr=self.args['lr'])
         return optimizer
@@ -68,16 +83,31 @@ class AudioLM(lightning.LightningModule):
         embs = embs[:, :-1] # [batch_size, seq_len, emb_size]
         return embs, tokens, spectrogram
 
-    def forward(self, x):
+    def prep_downstream_input(self, x, gt_tokens):
+        # x: [batch_size * seq_len, emb_size]
+        # gt_tokens: [batch_size, seq_len, n_quantizers]
+        gt_tokens = gt_tokens.reshape(-1, gt_tokens.shape[-1])[:, :-1] # [batch_size * seq_len, n_quantizers-1] (shifted)
+        gt_embs = self.downstream_token_emb(gt_tokens) # [batch_size * seq_len, n_quantizers-1, emb_size]
+        x = x.unsqueeze(1)
+        x = torch.cat([x, gt_embs], dim=1) # [batch_size * seq_len, n_quantizers, emb_size]
+        return x
+
+    def train_forward(self, x, gt_tokens):
         x = self.gpt(inputs_embeds=x).last_hidden_state # [batch_size, seq_len, emb_size]
-        x = self.cls(x) # [batch_size, seq_len, codebook_size * n_quantizers]
-        x = x.reshape(x.shape[0], x.shape[1], self.rvqvae.n_quantizers, self.rvqvae.codebook_size)
+        x = x.reshape(-1, x.shape[-1]) # [batch_size * seq_len, emb_size]
+
+        if self.downstream_input_proj is not None:
+            x = self.downstream_input_proj(x)
+
+        x = self.prep_downstream_input(x, gt_tokens) # [batch_size * seq_len, n_quantizers, emb_size]
+        x = self.downstream_gpt(inputs_embeds=x).last_hidden_state # [batch_size * seq_len, n_quantizers, emb_size]
+        x = self.cls(x) # [batch_size * seq_len, n_quantizers, codebook_size]
         return x
 
     def training_step(self, batch, batch_idx):
         batch_size = batch['wav'].shape[0]
         embs, gt_tokens, _ = self.prep_input_outputs(batch)
-        preds = self(embs) # [batch_size, seq_len, n_quantizers, codebook_size]
+        preds = self.train_forward(embs, gt_tokens) # emb: [batch_size, seq_len, n_quantizers, codebook_size], gt_tokens: [batch_size, seq_len, n_quantizers]
         gt_tokens = gt_tokens.reshape(-1)
         preds = preds.reshape(-1, preds.shape[-1])
         loss = torch.nn.functional.cross_entropy(preds, gt_tokens)
@@ -88,7 +118,7 @@ class AudioLM(lightning.LightningModule):
     def eval_step(self, name, batch, batch_idx):
         batch_size = batch['wav'].shape[0]
         embs, gt_tokens, spectrogram = self.prep_input_outputs(batch)
-        preds = self(embs) # [batch_size, seq_len, n_quantizers, codebook_size]
+        preds = self.train_forward(embs, gt_tokens) # emb: [batch_size, seq_len, n_quantizers, codebook_size], gt_tokens: [batch_size, seq_len, n_quantizers]
         gt_tokens = gt_tokens.reshape(-1)
         preds = preds.reshape(-1, preds.shape[-1])
         loss = torch.nn.functional.cross_entropy(preds, gt_tokens)
