@@ -39,7 +39,12 @@ class AudioLM(lightning.LightningModule):
             params.append(self.input_proj.parameters()) 
         params_to_update = itertools.chain(*params)
         optimizer = torch.optim.Adam(params_to_update, lr=self.args['lr'])
-        return optimizer
+
+        # LR scheduler
+        scheduler_warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=self.args['lr_scheduler_start_factor'], end_factor=1, total_iters=self.args['lr_scheduler_warmup_epochs'])
+        scheduler_anneal = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1, end_factor=self.args['lr_scheduler_end_factor'], total_iters=self.args['lr_scheduler_anneal_epochs'])
+        scheduler = torch.optim.lr_scheduler.SequentialLR(optimizer, [scheduler_warmup, scheduler_anneal], milestones=[self.args['lr_scheduler_warmup_epochs']])
+        return [optimizer], [scheduler]
     
     def batch_to_tokens(self, batch):
         x = batch['wav'] # [batch_size, seq_len, n_samples]

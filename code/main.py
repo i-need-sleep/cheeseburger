@@ -134,10 +134,15 @@ if __name__ == '__main__':
 
     # Training
     parser.add_argument('--batch_size', default=64, type=int)
-    parser.add_argument('--lr', default=3e-4, type=float)
     parser.add_argument('--max_n_epochs', default=-1, type=int)
     parser.add_argument('--eval_n_epoch', default=1, type=int)
     parser.add_argument('--checkpoint', default=None, type=str)
+
+    parser.add_argument('--lr', default=3e-4, type=float)
+    parser.add_argument('--lr_scheduler_start_factor', default=1, type=float)
+    parser.add_argument('--lr_scheduler_warmup_epochs', default=1, type=int)
+    parser.add_argument('--lr_scheduler_end_factor', default=1, type=float)
+    parser.add_argument('--lr_scheduler_anneal_epochs', default=1, type=int)
 
     # Training: Spectrogram_RVQVAE
     parser.add_argument('--commit_loss_weight', default=1, type=float)
@@ -166,10 +171,17 @@ if __name__ == '__main__':
         args.name = 'debug'
         args.single_worker = True
 
-        args.task = 'det_cheeseburger'
+        args.task = 'audio_lm'
         args.mode = 'train'
         
         args.batch_size = 16
-        args.max_n_epochs = 3
+        args.max_n_epochs = 5
+
+        args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/quantizer6_epoch=12-step=6136.ckpt'
+
+        args.lr_scheduler_start_factor = 0.1
+        args.lr_scheduler_warmup_epochs = 2
+        args.lr_scheduler_end_factor = 0.1
+        args.lr_scheduler_anneal_epochs = 2
 
     main(args)
