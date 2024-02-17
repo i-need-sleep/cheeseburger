@@ -175,7 +175,7 @@ if __name__ == '__main__':
         args.mode = 'train'
         
         args.batch_size = 16
-        args.max_n_epochs = 5
+        args.max_n_epochs = 3
 
         args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/quantizer6_epoch=12-step=6136.ckpt'
 

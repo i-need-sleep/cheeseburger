@@ -4,6 +4,8 @@ from typing import Any
 
 import torch
 import lightning
+from lightning.pytorch.utilities import grad_norm
+
 import transformers
 
 from models.spectogram_rvqvae import Spectorgram_RVQVAE
@@ -37,8 +39,8 @@ class AudioLM(lightning.LightningModule):
         params = [self.gpt.parameters(), self.bos_emb.parameters(), self.cls.parameters()] # The RVQVAE is frozen
         if self.input_proj is not None:
             params.append(self.input_proj.parameters()) 
-        params_to_update = itertools.chain(*params)
-        optimizer = torch.optim.Adam(params_to_update, lr=self.args['lr'])
+        self.params_to_update = itertools.chain(*params)
+        optimizer = torch.optim.Adam(self.params_to_update, lr=self.args['lr'])
 
         # LR scheduler
         scheduler_warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=self.args['lr_scheduler_start_factor'], end_factor=1, total_iters=self.args['lr_scheduler_warmup_epochs'])
@@ -88,7 +90,13 @@ class AudioLM(lightning.LightningModule):
         loss = torch.nn.functional.cross_entropy(preds, gt_tokens)
         
         self.log('train/loss', loss, batch_size=batch_size)
+        self.log('train/lr', self.trainer.optimizers[0].param_groups[0]['lr'], batch_size=batch_size)
         return loss
+    
+    def on_before_optimizer_step(self, optimizer):
+        # Track the gradient norms
+        grad_norms = grad_norm(self, norm_type=2)['grad_2.0_norm_total']
+        self.log('train/grad_norms', grad_norms, batch_size=1)
     
     def eval_step(self, name, batch, batch_idx):
         batch_size = batch['wav'].shape[0]
