@@ -81,7 +81,7 @@ def main(args):
     elif args.task == 'det_cheeseburger':
         sr = 16000
         train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker)
-        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker)
         test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         model = Deterministic_Cheeseburger(vars(args))
     else:
@@ -98,10 +98,11 @@ def main(args):
         enable_progress_bar=args.single_worker,
         log_every_n_steps=len(train_loader)//10 if not args.debug else 1, # Log 10 times per epoch
         callbacks=[checkpoint_callback],
-        inference_mode=False if (args.task=='spectrogram_rvqvae' and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
+        inference_mode=False if (args.task in['spectrogram_rvqvae', 'det_cheeseburger'] and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
         limit_train_batches=3 if args.debug else 1.0,
         limit_val_batches=3 if args.debug else 1.0,
         limit_test_batches=3 if args.debug else 1.0,
+        limit_predict_batches= args.n_prediction_batches,
     )
 
     if args.mode == 'train':
@@ -159,11 +160,11 @@ if __name__ == '__main__':
     parser.add_argument('--det_cheese_wav_lm_checkpoint', default='../pretrained/deterministic/det_wav_lm.bin', type=str)
     parser.add_argument('--det_cheese_spectrogram_ae_checkpoint', default='../pretrained/deterministic/linear_ae.bin', type=str)
     parser.add_argument('--det_cheese_pitch_lm_checkpoint', default='../pretrained/deterministic/pitch_lm.bin', type=str)
-    parser.add_argument('--det_cheese_insertion_layer', default=3, type=int)
-    parser.add_argument('--det_cheese_ce_weight', default=1, type=float)
+    parser.add_argument('--det_cheese_insertion_layer', default=5, type=int)
+    # parser.add_argument('--det_cheese_ce_weight', default=1, type=float)
 
     # Prediction
-    parser.add_argument('--n_predictions', default=10, type=int)
+    parser.add_argument('--n_prediction_batches', default=3, type=int)
 
     args = parser.parse_args()
     args.uglobals = logging_utils.module_to_dict(uglobals)
@@ -172,13 +173,13 @@ if __name__ == '__main__':
         args.name = 'debug'
         args.single_worker = True
 
-        args.task = 'audio_lm'
-        args.mode = 'train'
+        args.task = 'det_cheeseburger'
+        args.mode = 'predict_dev'
         
-        args.batch_size = 16
+        args.batch_size = 2
         args.max_n_epochs = 3
 
-        args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/quantizer6_epoch=12-step=6136.ckpt'
+        args.checkpoint = '../results/runs/det_cheeseburger/det_ches_3e-4.ckpt'
 
         args.lr_scheduler_start_factor = 0.1
         args.lr_scheduler_warmup_epochs = 2

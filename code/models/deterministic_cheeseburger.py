@@ -1,6 +1,8 @@
 import itertools
 import types
 import copy
+from pathlib import Path
+from scipy.io.wavfile import write as wav_write
 
 import torch
 import lightning
@@ -38,6 +40,11 @@ class Deterministic_Cheeseburger(lightning.LightningModule):
         super().__init__()
         self.args = args
         self.save_hyperparameters()
+
+        # Predictions
+        self.output_folder = f'{args["uglobals"]["OUTPUTS_DIR"]}/{args["task"]}/{args["name"]}'
+        if args['mode'] == 'predict_dev':
+            Path(self.output_folder).mkdir(parents=True, exist_ok=True)
         
         # Modeling
         print(f'Loading WAV LM from checkpoint: {args["det_cheese_wav_lm_checkpoint"]}')
@@ -147,6 +154,72 @@ class Deterministic_Cheeseburger(lightning.LightningModule):
     def test_step(self, batch, batch_idx):
         loss = self.eval_step('test', batch, batch_idx)
         return loss
+    
+    def autoregressive_forward(self, x, context_len, enforce_note=True):
+        batch_size = x.shape[0]
+        seq_len = x.shape[1]
 
+        # Take into account zero padding
+        x = x[:, :context_len + 1, :] # [batch_size, seq_len, emb_size]
+        notes_preds = []
+
+        # Unroll
+        while x.shape[1] < seq_len + 1:
+            pre_encode = copy.deepcopy(x.detach())
+            x = self.wav_lm.ae.encode(x)
+            x = self.wav_lm.gpt.forward_before(inputs_embeds=x)
+            x = self.adaptor_in(x)
+            x = self.pitch_lm.gpt(inputs_embeds=x).last_hidden_state
+            notes_pred = self.pitch_lm.lm_head(x)
+
+            # Overwrite the note prediction
+            # if enforce_note:
+            #     for i in range(notes_pred.shape[0]):
+            #         # for j in range(notes_pred.shape[1]):
+            #         j = -1
+            #         val = notes_pred[i, j, 60]
+            #         max_idx = notes_pred[i, j, :].argmax()
+            #         notes_pred[i, j, 60] = torch.max(notes_pred[i, j, :])
+            #         notes_pred[i, j, max_idx] = val
+
+            notes_pred_ = notes_pred.argmax(dim=-1)[:, -1:]
+            notes_preds.append(notes_pred_)
+            x = self.adaptor_out(notes_pred)
+            x = self.wav_lm.gpt.forward_after(overwrite_hidden_states=x, inputs_embeds=x).last_hidden_state
+            pred = self.wav_lm.ae.decode(x, batch_size, x.shape[1])
+            x = torch.cat((pre_encode, pred[:, -1:, :, :]), dim=1)
+        notes_pred = torch.cat(notes_preds, dim=1)
+        return x.detach(), notes_pred
+    
+    def spectrogram_to_wav(self, spec):
+        spec = self.wav_lm.ae.db_to_amp(spec)
+        spec = self.wav_lm.invers_transform(spec)
+        wav = self.wav_lm.ae.grifflim_transform(spec).cpu().numpy()
+        return wav
+
+    @torch.enable_grad() 
     def predict_step(self, batch, batch_idx):
-        raise NotImplementedError
+        context_len = 4
+        
+        spectrogram_in, spectrogram_truth, notes_truth, batch_size = self.prep_batch(batch)
+        spectrogram_pred, notes_pred = self.autoregressive_forward(spectrogram_in, context_len)
+        wav_truth = batch['wav'].reshape(batch_size, -1).cpu().numpy() #[batch, n_samples]
+        wav_oracle = self.spectrogram_to_wav(spectrogram_truth).reshape(batch_size, -1)
+        wav_pred = self.spectrogram_to_wav(spectrogram_pred).reshape(batch_size, -1)
+
+        for i in range(batch_size):
+            wav_truth_i = wav_truth[i]
+            wav_oracle_i = wav_oracle[i]
+            wav_pred_i = wav_pred[i]
+            notes_truth_i = notes_truth[i]
+            notes_pred_i = notes_pred[i]
+
+            wav_write(f'{self.output_folder}/{batch_idx}_{i}_truth.wav', 16000, wav_truth_i)
+            wav_write(f'{self.output_folder}/{batch_idx}_{i}_oracle.wav', 16000, wav_oracle_i)
+            wav_write(f'{self.output_folder}/{batch_idx}_{i}_pred.wav', 16000, wav_pred_i)
+            with open(f'{self.output_folder}/{batch_idx}_{i}_truth.txt', 'w') as f:
+                f.write(str(notes_truth_i))
+            with open(f'{self.output_folder}/{batch_idx}_{i}_pred.txt', 'w') as f:
+                f.write(str(notes_pred_i))
+
+        return
