@@ -160,6 +160,7 @@ if __name__ == '__main__':
     parser.add_argument('--det_cheese_spectrogram_ae_checkpoint', default='../pretrained/deterministic/linear_ae.bin', type=str)
     parser.add_argument('--det_cheese_pitch_lm_checkpoint', default='../pretrained/deterministic/pitch_lm.bin', type=str)
     parser.add_argument('--det_cheese_insertion_layer', default=3, type=int)
+    parser.add_argument('--det_cheese_ce_weight', default=1, type=float)
 
     # Prediction
     parser.add_argument('--n_predictions', default=10, type=int)

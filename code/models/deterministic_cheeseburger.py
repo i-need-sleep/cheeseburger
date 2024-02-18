@@ -130,7 +130,7 @@ class Deterministic_Cheeseburger(lightning.LightningModule):
 
         spectrogram_mse_loss = torch.nn.functional.mse_loss(spectrogram_pred, spectrogram_truth)
         
-        loss = spectrogram_mse_loss + notes_ce_loss
+        loss = (2 - self.args['det_cheese_ce_weight']) * spectrogram_mse_loss + self.args['det_cheese_ce_weight'] * notes_ce_loss
 
         notes_accuracy = (notes_pred == notes_truth).float().mean()
 
