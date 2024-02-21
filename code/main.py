@@ -15,6 +15,7 @@ from models.audio_lm import AudioLM
 from models.cascading_audio_lm import CascadingAudioLM
 from models.deterministic_cheeseburger import Deterministic_Cheeseburger
 from models.deterministic_wav_transformer import DeterministicWavTransformer
+from models.pitch_lm import PitchLM
 
 def main(args):
     # The default temp dir does not work on the cluster
@@ -91,6 +92,12 @@ def main(args):
         dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker)
         test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         model = DeterministicWavTransformer(vars(args), sr=sr)
+    elif args.task == 'pitch_lm':
+        sr = 16000
+        train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker)
+        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker)
+        test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        model = PitchLM(vars(args))
     else:
         raise NotImplementedError
     
@@ -137,7 +144,7 @@ if __name__ == '__main__':
     parser.add_argument('--single_worker', action='store_true')
     
     # Formulation
-    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm', 'det_cheeseburger', 'det_wav_tf'])
+    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm', 'det_cheeseburger', 'det_wav_tf', 'pitch_lm'])
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'predict_dev'])
 
     # Training
@@ -168,7 +175,10 @@ if __name__ == '__main__':
     parser.add_argument('--det_cheese_spectrogram_ae_checkpoint', default='../pretrained/deterministic/linear_ae.bin', type=str)
     parser.add_argument('--det_cheese_pitch_lm_checkpoint', default='../pretrained/deterministic/pitch_lm.bin', type=str)
     parser.add_argument('--det_cheese_insertion_layer', default=5, type=int)
-    # parser.add_argument('--det_cheese_ce_weight', default=1, type=float)
+    parser.add_argument('--det_cheese_ce_weight', default=1, type=float)
+
+    # Training: Pitch_LM
+    parser.add_argument('--pitch_lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])
 
     # Prediction
     parser.add_argument('--n_prediction_batches', default=3, type=int)
@@ -180,7 +190,7 @@ if __name__ == '__main__':
         args.name = 'debug'
         args.single_worker = True
 
-        args.task = 'det_wav_tf'
+        args.task = 'pitch_lm'
         args.mode = 'train'
         
         args.batch_size = 3

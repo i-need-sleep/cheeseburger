@@ -8,7 +8,7 @@ import torch
 import lightning
 import transformers
 
-from models.pitch_lm import Pitch_LM
+from models.pitch_lm_old import Pitch_LM
 from models.wav_lm import WAV_LM
 import models.modeling_utils.gpt_partial_forward_patch as gpt_patch
 

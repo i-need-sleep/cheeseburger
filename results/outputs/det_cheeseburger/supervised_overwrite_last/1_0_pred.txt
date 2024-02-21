@@ -1,0 +1,1 @@
+tensor([57, 57, 57, 57], device='cuda:0')
