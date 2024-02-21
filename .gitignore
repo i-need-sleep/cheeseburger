@@ -30,6 +30,7 @@ data/*/*
 *.bin
 *.ckpt
 results/runs/*/*
+results/outputs/*
 
 # sh
 *.err
