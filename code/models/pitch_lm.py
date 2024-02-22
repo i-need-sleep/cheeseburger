@@ -80,6 +80,7 @@ class PitchLM(lightning.LightningModule):
         accuracy = (logits.argmax(-1) == notes_target).float().mean()
         self.log(f'{name}/loss', loss, batch_size=batch_size) # Automatically averaged
         self.log(f'{name}/accuracy', accuracy, batch_size=batch_size)
+        self.log(f'{name}/monitor', accuracy, batch_size=batch_size) # Keep the best checkpoint based on this metric
         return loss
 
     def validation_step(self, batch, batch_idx):

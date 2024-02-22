@@ -47,7 +47,7 @@ def main(args):
         dirpath=f'{logger_dir}/{args.name}/checkpoints',
         save_last=True,
         save_top_k=1,
-        monitor='val/loss'
+        monitor='val/monitor'
     )
 
     # Resume from the last checkpoint
@@ -71,7 +71,7 @@ def main(args):
     elif args.task == 'audio_lm':
         sr = 16000
         train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker)
-        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
+        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker)
         test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         model = AudioLM(vars(args))
     elif args.task == 'cascade_audio_lm':
@@ -112,7 +112,7 @@ def main(args):
         enable_progress_bar=args.single_worker,
         log_every_n_steps=len(train_loader)//10 if not args.debug else 1, # Log 10 times per epoch
         callbacks=[checkpoint_callback],
-        inference_mode=False if (args.task in['spectrogram_rvqvae', 'det_cheeseburger'] and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
+        inference_mode=False if (args.task in['spectrogram_rvqvae', 'det_cheeseburger', 'audio_lm'] and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
         limit_train_batches=3 if args.debug else 1.0,
         limit_val_batches=3 if args.debug else 1.0,
         limit_test_batches=3 if args.debug else 1.0,
@@ -190,10 +190,14 @@ if __name__ == '__main__':
         args.name = 'debug'
         args.single_worker = True
 
-        args.task = 'pitch_lm'
-        args.mode = 'train'
+        args.task = 'audio_lm'
+        args.mode = 'predict_dev'
         
         args.batch_size = 3
         args.max_n_epochs = 4
+
+        args.lm_config = 'gpt2-large'
+        args.rvqvae_checkpoint = '../results/runs/spectrogram_rvqvae/quantizer4.ckpt'
+        args.checkpoint = '../results/runs/audio_lm/large_quantizer4.ckpt'
 
     main(args)
