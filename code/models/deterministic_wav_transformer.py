@@ -6,6 +6,7 @@ import torch
 import torchaudio
 import lightning
 from lightning.pytorch.utilities import grad_norm
+from scipy.io.wavfile import write as wav_write
 
 import transformers
 
@@ -36,6 +37,11 @@ class DeterministicWavTransformer(lightning.LightningModule):
         self.transform = torchaudio.transforms.MelSpectrogram(sample_rate=sr, n_fft=n_fft)
         self.invers_transform = torchaudio.transforms.InverseMelScale(sample_rate=sr, n_stft=n_stft)
         self.grifflim_transform = torchaudio.transforms.GriffinLim(n_fft=n_fft)
+
+        # Initialize the output folder
+        self.output_folder = f'{args["uglobals"]["OUTPUTS_DIR"]}/{args["task"]}/{args["name"]}'
+        if args['mode'] == 'predict_dev':
+            Path(self.output_folder).mkdir(parents=True, exist_ok=True)
 
     def get_gpt_config(self):
         # Modify the config of a distill-gpt2 model
@@ -95,6 +101,27 @@ class DeterministicWavTransformer(lightning.LightningModule):
         x = x.reshape(batch_size, seq_len, x.shape[2], x.shape[3]) # [batch_size, seq_len, 128, 16]
         return x
 
+    def infer(self, x, context_len):
+        # x: [batch_size, seq_len-1, 128, 16]
+        batch_size = x.shape[0]
+        seq_len = x.shape[1] + 1
+
+        x = x[:, :context_len, :, :]
+
+        while x.shape[1] < seq_len:
+            emb = x.reshape(-1, 1, x.shape[2], x.shape[3]) # [batch_size * (seq_len-1), 1, 128, 16]
+            emb = self.encoder(emb)
+            emb = emb.reshape(batch_size, -1, self.gpt_config.n_embd) # [batch_size, seq_len-1, emb_size]
+
+            bos = self.get_bos_emb(batch_size)
+            emb = torch.cat([bos, emb], dim=1) # [batch_size, seq_len, emb_size], pad the BoS token
+
+            pred = self.gpt(inputs_embeds=emb).last_hidden_state[:, -1:, :] # [batch_size, 1, emb_size]
+            pred = pred.reshape(batch_size, -1, 1, 1)
+            pred = self.decoder(pred)
+            pred = pred.reshape(batch_size, 1, pred.shape[2], pred.shape[3])
+            x = torch.cat([x, pred], dim=1)
+        return x
     
     # Training
     def training_step(self, batch, batch_idx):
@@ -128,5 +155,24 @@ class DeterministicWavTransformer(lightning.LightningModule):
         loss = self.eval_step('test', batch, batch_idx)
         return loss
 
+    @torch.enable_grad() 
     def predict_step(self, batch, batch_idx):
-        raise NotImplementedError
+        context_len = 4
+
+        wav = batch['wav']
+        batch_size = wav.shape[0]
+        wav_original = deepcopy(wav)
+        x = self.preprocess_wav(wav) # spectrogram: [batch_size, seq_len, 128, 16]
+        spectrogram_oracle = deepcopy(x)
+        spectrogram_pred = self.infer(x[:, :-1, :, :], context_len).detach()
+
+        wav_original = wav_original.reshape(batch_size, -1).cpu().numpy()
+        wav_oracle = self.postprocess_wav(spectrogram_oracle, batch_size).reshape(batch_size, -1).cpu().numpy()
+        wav_pred = self.postprocess_wav(spectrogram_pred, batch_size).reshape(batch_size, -1).cpu().numpy()
+
+        names = batch['names']
+        for i, name in enumerate(names):
+            wav_write(f'{self.output_folder}/{name}_original.wav', self.sr, wav_original[i])
+            wav_write(f'{self.output_folder}/{name}_oracle.wav',  self.sr, wav_oracle[i])
+            wav_write(f'{self.output_folder}/{name}_pred.wav',  self.sr, wav_pred[i])
+        return
