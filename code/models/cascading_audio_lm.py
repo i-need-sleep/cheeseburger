@@ -138,6 +138,7 @@ class CascadingAudioLM(lightning.LightningModule):
         spectrogram = spectrogram.reshape(batch_size, -1, spectrogram.shape[-2], spectrogram.shape[-1])
         recons_loss = torch.nn.functional.mse_loss(preds, spectrogram)
         self.log(f'{name}/recons_mse', recons_loss, batch_size=batch_size)
+        self.log(f'{name}/monitor', recons_loss, batch_size=batch_size) # For early stopping
         return loss
     
     def validation_step(self, batch, batch_idx):

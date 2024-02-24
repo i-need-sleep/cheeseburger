@@ -184,6 +184,7 @@ class Spectorgram_RVQVAE(lightning.LightningModule):
         loss = recons_loss + commit_loss
 
         self.log("val/loss", loss, batch_size=batch_size) # Automatically averaged
+        self.log("val/monitor", loss, batch_size=batch_size) # For early stopping
         self.log("val/recons_loss", recons_loss, batch_size=batch_size)
         self.log("val/commit_loss", commit_loss, batch_size=batch_size)
         return loss
