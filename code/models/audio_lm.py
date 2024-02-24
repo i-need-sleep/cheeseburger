@@ -164,14 +164,20 @@ class AudioLM(lightning.LightningModule):
         pred = pred.reshape(-1, self.rvqvae.n_quantizers)
         pred = self.rvqvae.decode_from_indices(pred, batch_size).detach()
         spectrogram = spectrogram.reshape(batch_size, -1, spectrogram.shape[-2], spectrogram.shape[-1])
+
+        gt_tokens = gt_tokens.reshape(-1, self.rvqvae.n_quantizers)
+        vae_spectrogram = self.rvqvae.decode_from_indices(gt_tokens, batch_size).detach()
+        vae_spectrogram = vae_spectrogram.reshape(batch_size, -1, vae_spectrogram.shape[-2], vae_spectrogram.shape[-1])
         
         wav_original = batch['wav'].reshape(batch_size, -1)
-        wav_oracle = self.rvqvae.postprocess(spectrogram, batch_size).reshape(batch_size, -1)
+        wav_processed = self.rvqvae.postprocess(spectrogram, batch_size).reshape(batch_size, -1)
+        wav_vae = self.rvqvae.postprocess(vae_spectrogram, batch_size).reshape(batch_size, -1)
         wav_pred = self.rvqvae.postprocess(pred, batch_size).reshape(batch_size, -1)
 
         names = batch['names']
         for i, name in enumerate(names):
             wav_write(f'{self.output_folder}/{name}_original.wav', sr, wav_original[i].cpu().numpy())
-            wav_write(f'{self.output_folder}/{name}_oracle.wav',  sr, wav_oracle[i].cpu().numpy())
+            wav_write(f'{self.output_folder}/{name}_processed.wav',  sr, wav_processed[i].cpu().numpy())
+            wav_write(f'{self.output_folder}/{name}_vae_recons.wav',  sr, wav_vae[i].cpu().numpy())
             wav_write(f'{self.output_folder}/{name}_pred.wav',  sr, wav_pred[i].cpu().numpy())
         return

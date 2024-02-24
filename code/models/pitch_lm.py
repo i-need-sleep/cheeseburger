@@ -58,6 +58,16 @@ class PitchLM(lightning.LightningModule):
         x = self.gpt(x).last_hidden_state
         x = self.lm_head(x)
         return x
+    
+    def infer(self, notes, context_len):
+        seq_len = notes.shape[1]
+        notes = notes[:, :context_len + 1] # Consider the BoS
+        
+        while notes.shape[1] < seq_len + 1:
+            logits = self(notes)
+            next_note = logits[:, -1].argmax(-1, keepdim=True)
+            notes = torch.cat([notes, next_note], dim=1)
+        return notes
 
     # Training
     def training_step(self, batch, batch_idx):
@@ -88,8 +98,18 @@ class PitchLM(lightning.LightningModule):
         return loss
     
     def test_step(self, batch, batch_idx):
-        loss = self.eval_step('test', batch, batch_idx)
-        return loss
+        context_len = self.test_context_len
+
+        notes = batch['notes']
+        batch_size = notes.shape[0]
+        notes_input, notes_target = self.preprocess(notes)
+        notes_pred = self.infer(notes_input, context_len)
+        
+        notes_target = notes_target[:, context_len:]
+        notes_pred = notes_pred[:, context_len + 1:]
+        accuracy = (notes_pred == notes_target).float().mean()
+        self.log(f'test/accuracy', accuracy, batch_size=batch_size)
+        return accuracy
 
     def predict_step(self, batch, batch_idx):
         raise NotImplementedError
