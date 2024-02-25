@@ -2,6 +2,7 @@ from pathlib import Path
 import types
 import itertools
 from copy import deepcopy
+from scipy.io.wavfile import write as wav_write
 
 import torch
 import torchaudio
@@ -62,7 +63,11 @@ class DeterministicCheeseburger(lightning.LightningModule):
         self.wav_lm.gpt.det_cheese_insertion_layer = args['det_cheese_insertion_layer']
         self.wav_lm.gpt.forward_before = types.MethodType(gpt_patch.patched_forward_before, self.wav_lm.gpt)
         self.wav_lm.gpt.forward_after = types.MethodType(gpt_patch.patched_forward_after, self.wav_lm.gpt)
-    
+
+        # Output
+        self.output_folder = f'{args["uglobals"]["OUTPUTS_DIR"]}/{args["task"]}/{args["name"]}'
+        if args['mode'] == 'predict_dev':
+            Path(self.output_folder).mkdir(parents=True, exist_ok=True)
     # Optimization
     def configure_optimizers(self):
         params = [self.adaptor_in.parameters(), self.adaptor_out.parameters(), self.adaptor_skip.parameters()]
@@ -89,7 +94,7 @@ class DeterministicCheeseburger(lightning.LightningModule):
         seq_len = wav.shape[1]
         
         spectrogram_target = self.wav_lm.preprocess_wav(wav) # [batch_size, seq_len, 128, 16]
-        spectrogram_in = spectrogram_target[:, 1:] # Leave space for BoS
+        spectrogram_in = spectrogram_target[:, : -1] # Leave space for BoS
 
         notes_in, notes_target = self.pitch_lm.preprocess(notes) # Zero-padded and shifted: [batch_size, seq_len]
         return wav, spectrogram_in, spectrogram_target, notes_in, notes_target, batch_size, seq_len
@@ -211,7 +216,6 @@ class DeterministicCheeseburger(lightning.LightningModule):
         self.log(f'{log_name}/training_mode', 2, batch_size=batch_size)
         return mse
 
-    # Training
     def batch_to_loss(self, batch, name):
         wav, spectrogram_in, spectrogram_target, notes_in, notes_target, batch_size, seq_len = self.prep_batch(batch)
 
@@ -231,6 +235,22 @@ class DeterministicCheeseburger(lightning.LightningModule):
             raise NotImplementedError
         return loss
     
+    def infer(self, spectrogram_in, notes_in):
+        seq_len = spectrogram_in.shape[1] + 1
+        spectrogram_in = spectrogram_in[:, :self.test_context_len]
+        notes_in = notes_in[:, 1: 1 + self.test_context_len] # Remove the BoS token
+        print(spectrogram_in.shape)
+        
+        while spectrogram_in.shape[1] < seq_len:
+            spectrogram_pred, notes_logits = self.joint_forward(deepcopy(spectrogram_in.detach()))
+            print(spectrogram_pred[0, -1, :10])
+            notes_pred = notes_logits.argmax(-1)
+            spectrogram_in = torch.cat([spectrogram_in, spectrogram_pred[:, -1:]], dim=1).detach()
+            notes_in = torch.cat([notes_in, notes_pred[:, -1:]], dim=1).detach()
+        exit()
+        return spectrogram_in, notes_in
+    
+    # Step functions
     def training_step(self, batch, batch_idx):
         loss = self.batch_to_loss(batch, 'train')
         return loss
@@ -247,5 +267,24 @@ class DeterministicCheeseburger(lightning.LightningModule):
         loss = self.eval_step('test', batch, batch_idx)
         return loss
 
+    @torch.enable_grad() 
     def predict_step(self, batch, batch_idx):
-        raise NotImplementedError
+        wav, spectrogram_in, spectrogram_target, notes_in, notes_target, batch_size, seq_len = self.prep_batch(batch)
+        spectrogram_pred, notes_pred = self.infer(spectrogram_in, notes_in)
+
+        wav_original = wav.reshape(batch_size, -1).cpu().numpy() #[batch, n_samples]
+        wav_oracle = self.wav_lm.postprocess_wav(spectrogram_target, batch_size).reshape(batch_size, -1).cpu().numpy()
+        wav_pred = self.wav_lm.postprocess_wav(spectrogram_pred, batch_size).reshape(batch_size, -1).cpu().numpy()
+
+        names = batch['names']
+        for i, name in enumerate(names):
+            wav_write(f'{self.output_folder}/{name}_original.wav', self.sr, wav_original[i])
+            wav_write(f'{self.output_folder}/{name}_oracle.wav',  self.sr, wav_oracle[i])
+            wav_write(f'{self.output_folder}/{name}_pred.wav',  self.sr, wav_pred[i])
+            with open(f'{self.output_folder}/{name}_notes.txt', 'w') as f:
+                f.write('True:\n')
+                f.write(str(notes_target[i]))
+                f.write('\n')
+                f.write('Pred:\n')
+                f.write(str(notes_pred[i]))
+        return

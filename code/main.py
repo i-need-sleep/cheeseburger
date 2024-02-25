@@ -190,7 +190,7 @@ if __name__ == '__main__':
 
     # Prediction
     parser.add_argument('--n_prediction_batches', default=3, type=int)
-    parser.add_argument('--test_context_len', default=3, type=int)
+    parser.add_argument('--test_context_len', default=4, type=int)
 
     args = parser.parse_args()
     args.uglobals = logging_utils.module_to_dict(uglobals)
@@ -200,11 +200,13 @@ if __name__ == '__main__':
         args.single_worker = True
 
         args.task = 'det_cheeseburger'
-        args.mode = 'train'
+        args.mode = 'predict_dev'
 
-        args.training_mode = 'skip_branch'
+        # args.training_mode = 'skip_branch'
         
         args.batch_size = 3
         args.max_n_epochs = 4
+
+        args.checkpoint = '../results/runs/det_cheeseburger/lr3e-4.ckpt'
 
     main(args)
