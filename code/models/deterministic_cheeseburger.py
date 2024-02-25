@@ -124,6 +124,15 @@ class DeterministicCheeseburger(lightning.LightningModule):
         x = self.adaptor_in(x)
         x = self.pitch_lm.gpt(inputs_embeds=x).last_hidden_state
         notes_logits = self.pitch_lm.lm_head(x)
+
+        if True:
+            for i in range(notes_logits.shape[0]):
+                for j in range(notes_logits.shape[1]):
+                    val = deepcopy(notes_logits[i, j, 60].detach())
+                    max_idx = notes_logits[i, j, :].argmax()
+                    notes_logits[i, j, 60] = torch.max(notes_logits[i, j, :])
+                    notes_logits[i, j, max_idx] = val
+
         h_pitch = self.adaptor_out(notes_logits)
 
         if skip_only:
@@ -239,15 +248,13 @@ class DeterministicCheeseburger(lightning.LightningModule):
         seq_len = spectrogram_in.shape[1] + 1
         spectrogram_in = spectrogram_in[:, :self.test_context_len]
         notes_in = notes_in[:, 1: 1 + self.test_context_len] # Remove the BoS token
-        print(spectrogram_in.shape)
         
         while spectrogram_in.shape[1] < seq_len:
             spectrogram_pred, notes_logits = self.joint_forward(deepcopy(spectrogram_in.detach()))
-            print(spectrogram_pred[0, -1, :10])
             notes_pred = notes_logits.argmax(-1)
             spectrogram_in = torch.cat([spectrogram_in, spectrogram_pred[:, -1:]], dim=1).detach()
             notes_in = torch.cat([notes_in, notes_pred[:, -1:]], dim=1).detach()
-        exit()
+            
         return spectrogram_in, notes_in
     
     # Step functions

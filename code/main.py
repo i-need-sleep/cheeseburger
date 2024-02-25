@@ -207,6 +207,6 @@ if __name__ == '__main__':
         args.batch_size = 3
         args.max_n_epochs = 4
 
-        args.checkpoint = '../results/runs/det_cheeseburger/lr3e-4.ckpt'
+        args.checkpoint = '../results/runs/det_cheeseburger/joint_3e-4.ckpt'
 
     main(args)
