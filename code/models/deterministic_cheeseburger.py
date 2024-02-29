@@ -68,11 +68,13 @@ class DeterministicCheeseburger(lightning.LightningModule):
         self.output_folder = f'{args["uglobals"]["OUTPUTS_DIR"]}/{args["task"]}/{args["name"]}'
         if args['mode'] == 'predict_dev':
             Path(self.output_folder).mkdir(parents=True, exist_ok=True)
+
     # Optimization
     def configure_optimizers(self):
         params = [self.adaptor_in.parameters(), self.adaptor_out.parameters(), self.adaptor_skip.parameters()]
         self.params_to_update = itertools.chain(*params)
         optimizer = torch.optim.Adam(self.params_to_update, lr=self.args['lr'])
+        # Since Adam is per-parameter, we don't need to re-initalize the optimizer when switching training modes
 
         # LR scheduler
         scheduler_warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=self.args['lr_scheduler_start_factor'], end_factor=1, total_iters=self.args['lr_scheduler_warmup_epochs'])
@@ -83,6 +85,7 @@ class DeterministicCheeseburger(lightning.LightningModule):
     def on_before_optimizer_step(self, optimizer):
         # Track the gradient norms
         grad_norms = grad_norm(self, norm_type=2)['grad_2.0_norm_total']
+        self.log('train/lr', self.trainer.optimizers[0].param_groups[0]['lr'], batch_size=1)
         self.log('train/grad_norms', grad_norms, batch_size=1)
 
     # Data Processing
