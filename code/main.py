@@ -217,16 +217,16 @@ if __name__ == '__main__':
         args.intervention_step = 'last'
 
 
-    for name in ['skip', 'joint', 'finetuned']:
-        for mode in ['', 'sample_patch', 'swap', '01']:
-            for step in ['last', 'all']:
-                if step == 'last' and mode in ['sample_patch', '']:
-                    continue
-                args.intervention_mode = mode
-                args.intervention_step = step
-                args.checkpoint = f'../results/runs/det_cheeseburger/{name}_3e-4.ckpt'
-                args.name = f'intervention_{name}_{mode}_{step}'
-                main(args)
-    exit()
+    # for name in ['skip', 'joint', 'finetuned']:
+    #     for mode in ['', 'sample_patch', 'swap', '01']:
+    #         for step in ['last', 'all']:
+    #             if step == 'last' and mode in ['sample_patch', '']:
+    #                 continue
+    #             args.intervention_mode = mode
+    #             args.intervention_step = step
+    #             args.checkpoint = f'../results/runs/det_cheeseburger/{name}_3e-4.ckpt'
+    #             args.name = f'intervention_{name}_{mode}_{step}'
+    #             main(args)
+    # exit()
 
     main(args)
