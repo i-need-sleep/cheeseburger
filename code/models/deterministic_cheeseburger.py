@@ -162,6 +162,7 @@ class DeterministicCheeseburger(lightning.LightningModule):
         if skip_only:
             # Train only the skip adaptor
             h_pitch = h_pitch.detach()
+            notes_logits = notes_logits.detach()
 
         # Merged branch
         x = h_pitch + h_skip
@@ -180,7 +181,7 @@ class DeterministicCheeseburger(lightning.LightningModule):
         accuracy = (notes_logits.argmax(-1) == notes_target).float().mean()
 
         self.log(f'{log_name}/loss', loss, batch_size=batch_size)
-        self.log(f'{log_name}/monitor', loss, batch_size=batch_size) # Keep the best checkpoint based on this metric
+        self.log(f'{log_name}/monitor', mse, batch_size=batch_size) # Keep the best checkpoint based on this metric
         self.log(f'{log_name}/mse', mse, batch_size=batch_size)
         self.log(f'{log_name}/ce', ce, batch_size=batch_size)
         self.log(f'{log_name}/accuracy', accuracy, batch_size=batch_size)
@@ -225,7 +226,7 @@ class DeterministicCheeseburger(lightning.LightningModule):
         self.log(f'{log_name}/training_mode', 1, batch_size=batch_size)
         return ce
     
-    def post_brach_forward(self, notes):
+    def post_branch_forward(self, notes):
         batch_size = notes.shape[0]
         seq_len = notes.shape[1]
 
@@ -259,7 +260,7 @@ class DeterministicCheeseburger(lightning.LightningModule):
             notes_logits = self.pre_branch_forward(spectrogram_in)
             loss = self.pre_branch_loss_and_log(notes_logits, notes_target, batch_size, name)
         elif self.training_mode == 'post_branch':
-            spectrogram_pred = self.post_brach_forward(notes_in)
+            spectrogram_pred = self.post_branch_forward(notes_in)
             loss = self.post_branch_loss_and_log(spectrogram_pred, spectrogram_target, batch_size, name)
         elif self.training_mode == 'skip_branch':
             spectrogram_pred, notes_logits = self.joint_forward(spectrogram_in, skip_only=True)
@@ -318,5 +319,4 @@ class DeterministicCheeseburger(lightning.LightningModule):
                 f.write('\n')
                 f.write('Pred:\n')
                 f.write(str(notes_pred[i]))
-        exit()
         return

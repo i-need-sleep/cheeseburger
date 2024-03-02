@@ -46,7 +46,7 @@ def main(args):
     checkpoint_callback = lightning.pytorch.callbacks.ModelCheckpoint(
         dirpath=f'{logger_dir}/{args.name}/checkpoints',
         save_last=True,
-        save_top_k=2,
+        save_top_k=1,
         monitor='val/monitor' # Minimized
     )
 
@@ -108,7 +108,7 @@ def main(args):
         accelerator=accelerator,
         logger=logger,
         deterministic=not args.nondeterministic,
-        num_sanity_val_steps=2,
+        num_sanity_val_steps=1,
         enable_progress_bar=args.single_worker,
         log_every_n_steps=len(train_loader)//5 if not args.debug else 1, # Log 5 times per epoch
         callbacks=[checkpoint_callback],
@@ -191,7 +191,7 @@ if __name__ == '__main__':
     parser.add_argument('--pitch_lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])
 
     # Prediction
-    parser.add_argument('--n_prediction_batches', default=3, type=int)
+    parser.add_argument('--n_prediction_batches', default=4, type=int)
     parser.add_argument('--test_context_len', default=4, type=int)
     
     # Prediction: Intervention
@@ -208,7 +208,7 @@ if __name__ == '__main__':
         args.task = 'det_cheeseburger'
         args.mode = 'predict_dev'
         
-        args.batch_size = 3
+        args.batch_size = 5
         args.max_n_epochs = 4
 
         args.checkpoint = '../results/runs/det_cheeseburger/skip_3e-4.ckpt'
@@ -217,10 +217,10 @@ if __name__ == '__main__':
         args.intervention_step = 'last'
 
 
-    for mode in ['sample_patch', 'swap', '01']:
-        for step in ['last', 'all']:
-            for name in ['skip', 'joint', 'finetuned']:
-                if step == 'last' and mode == 'sample_patch':
+    for name in ['skip', 'joint', 'finetuned']:
+        for mode in ['', 'sample_patch', 'swap', '01']:
+            for step in ['last', 'all']:
+                if step == 'last' and mode in ['sample_patch', '']:
                     continue
                 args.intervention_mode = mode
                 args.intervention_step = step
