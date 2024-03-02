@@ -46,8 +46,8 @@ def main(args):
     checkpoint_callback = lightning.pytorch.callbacks.ModelCheckpoint(
         dirpath=f'{logger_dir}/{args.name}/checkpoints',
         save_last=True,
-        save_top_k=1,
-        monitor='val/monitor'
+        save_top_k=2,
+        monitor='val/monitor' # Minimized
     )
 
     # Resume from the last checkpoint
@@ -130,6 +130,8 @@ def main(args):
         trainer.test(model, dataloaders=dev_loader, ckpt_path=args.checkpoint)
     elif args.mode == 'predict_dev':
         model.test_context_len = args.test_context_len
+        model.intervention_mode = args.intervention_mode
+        model.intervention_step = args.intervention_step
         trainer.predict(model, dataloaders=dev_loader, ckpt_path=args.checkpoint, return_predictions=False)
     else:
         raise NotImplementedError
@@ -191,7 +193,11 @@ if __name__ == '__main__':
     # Prediction
     parser.add_argument('--n_prediction_batches', default=3, type=int)
     parser.add_argument('--test_context_len', default=4, type=int)
-
+    
+    # Prediction: Intervention
+    parser.add_argument('--intervention_mode', default='', type=str) # swap, 01, sample_patch
+    parser.add_argument('--intervention_step', default='', type=str)
+    
     args = parser.parse_args()
     args.uglobals = logging_utils.module_to_dict(uglobals)
 
@@ -201,12 +207,26 @@ if __name__ == '__main__':
 
         args.task = 'det_cheeseburger'
         args.mode = 'predict_dev'
-
-        # args.training_mode = 'skip_branch'
         
         args.batch_size = 3
         args.max_n_epochs = 4
 
-        args.checkpoint = '../results/runs/det_cheeseburger/joint_3e-4.ckpt'
+        args.checkpoint = '../results/runs/det_cheeseburger/skip_3e-4.ckpt'
+
+        args.intervention_mode = 'sample_patch'
+        args.intervention_step = 'last'
+
+
+    for mode in ['sample_patch', 'swap', '01']:
+        for step in ['last', 'all']:
+            for name in ['skip', 'joint', 'finetuned']:
+                if step == 'last' and mode == 'sample_patch':
+                    continue
+                args.intervention_mode = mode
+                args.intervention_step = step
+                args.checkpoint = f'../results/runs/det_cheeseburger/{name}_3e-4.ckpt'
+                args.name = f'intervention_{name}_{mode}_{step}'
+                main(args)
+    exit()
 
     main(args)

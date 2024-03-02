@@ -128,13 +128,34 @@ class DeterministicCheeseburger(lightning.LightningModule):
         x = self.pitch_lm.gpt(inputs_embeds=x).last_hidden_state
         notes_logits = self.pitch_lm.lm_head(x)
 
-        if True:
-            for i in range(notes_logits.shape[0]):
-                for j in range(notes_logits.shape[1]):
-                    val = deepcopy(notes_logits[i, j, 60].detach())
-                    max_idx = notes_logits[i, j, :].argmax()
-                    notes_logits[i, j, 60] = torch.max(notes_logits[i, j, :])
-                    notes_logits[i, j, max_idx] = val
+        if self.intervention_mode != '':
+            print(self.intervention_mode, self.intervention_step)
+
+            if self.intervention_mode == 'sample_patch':
+                notes_logits[:] = notes_logits[0]
+            else:
+                for i in range(notes_logits.shape[0]):
+
+                    if self.intervention_step == 'all':
+                        range_start = 0
+                        range_end = notes_logits.shape[1]
+                    elif self.intervention_step == 'last':
+                        range_start = notes_logits.shape[1] - 1
+                        range_end = notes_logits.shape[1]
+                    else:
+                        raise NotImplementedError
+                    
+                    for j in range(range_start, range_end):
+                        if self.intervention_mode == 'swap':
+                            val = deepcopy(notes_logits[i, j, 60].detach())
+                            max_idx = notes_logits[i, j, :].argmax()
+                            notes_logits[i, j, 60] = torch.max(notes_logits[i, j, :])
+                            notes_logits[i, j, max_idx] = val
+                        elif self.intervention_mode == '01':
+                            notes_logits = torch.zeros_like(notes_logits)
+                            notes_logits[i, j, 60] = 1
+                        else:
+                            raise NotImplementedError
 
         h_pitch = self.adaptor_out(notes_logits)
 
@@ -198,7 +219,7 @@ class DeterministicCheeseburger(lightning.LightningModule):
         accuracy = (notes_logits.argmax(-1) == notes_target).float().mean()
 
         self.log(f'{log_name}/ce', ce, batch_size=batch_size)
-        self.log(f'{log_name}/monitor', ce, batch_size=batch_size) # Keep the best checkpoint based on this metric
+        self.log(f'{log_name}/monitor', -1 * accuracy, batch_size=batch_size) # Keep the best checkpoint based on this metric
         self.log(f'{log_name}/accuracy', accuracy, batch_size=batch_size)
 
         self.log(f'{log_name}/training_mode', 1, batch_size=batch_size)
@@ -288,13 +309,14 @@ class DeterministicCheeseburger(lightning.LightningModule):
 
         names = batch['names']
         for i, name in enumerate(names):
-            wav_write(f'{self.output_folder}/{name}_original.wav', self.sr, wav_original[i])
-            wav_write(f'{self.output_folder}/{name}_oracle.wav',  self.sr, wav_oracle[i])
-            wav_write(f'{self.output_folder}/{name}_pred.wav',  self.sr, wav_pred[i])
-            with open(f'{self.output_folder}/{name}_notes.txt', 'w') as f:
+            wav_write(f'{self.output_folder}/{batch_idx}_{i}_{name}_original.wav', self.sr, wav_original[i])
+            wav_write(f'{self.output_folder}/{batch_idx}_{i}_{name}_oracle.wav',  self.sr, wav_oracle[i])
+            wav_write(f'{self.output_folder}/{batch_idx}_{i}_{name}_pred.wav',  self.sr, wav_pred[i])
+            with open(f'{self.output_folder}/{batch_idx}_{i}_{name}_notes.txt', 'w') as f:
                 f.write('True:\n')
                 f.write(str(notes_target[i]))
                 f.write('\n')
                 f.write('Pred:\n')
                 f.write(str(notes_pred[i]))
+        exit()
         return

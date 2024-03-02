@@ -145,6 +145,7 @@ class DeterministicWavTransformer(lightning.LightningModule):
         loss = torch.nn.functional.mse_loss(x, x_true)
 
         self.log(f'{name}/loss', loss, batch_size=batch_size) # Automatically averaged
+        self.log(f'{name}/monitor', loss, batch_size=batch_size) # Monitor the loss
         return loss
 
     def validation_step(self, batch, batch_idx):
