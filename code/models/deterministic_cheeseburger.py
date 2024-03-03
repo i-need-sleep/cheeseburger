@@ -128,6 +128,12 @@ class DeterministicCheeseburger(lightning.LightningModule):
         x = self.pitch_lm.gpt(inputs_embeds=x).last_hidden_state
         notes_logits = self.pitch_lm.lm_head(x)
 
+        try:
+            self.intervention_mode
+        except AttributeError:
+            self.intervention_mode = ''
+            self.intervention_step = ''
+            
         if self.intervention_mode != '':
             print(self.intervention_mode, self.intervention_step)
 
