@@ -128,12 +128,13 @@ class DeterministicCheeseburger(lightning.LightningModule):
         x = self.pitch_lm.gpt(inputs_embeds=x).last_hidden_state
         notes_logits = self.pitch_lm.lm_head(x)
 
+        # Intervention
         try:
             self.intervention_mode
         except AttributeError:
             self.intervention_mode = ''
             self.intervention_step = ''
-            
+
         if self.intervention_mode != '':
             print(self.intervention_mode, self.intervention_step)
 
@@ -158,12 +159,16 @@ class DeterministicCheeseburger(lightning.LightningModule):
                             notes_logits[i, j, 60] = torch.max(notes_logits[i, j, :])
                             notes_logits[i, j, max_idx] = val
                         elif self.intervention_mode == '01':
-                            notes_logits = torch.zeros_like(notes_logits)
+                            notes_logits[i, j, :] = 0
                             notes_logits[i, j, 60] = 1
                         else:
                             raise NotImplementedError
 
-        h_pitch = self.adaptor_out(notes_logits)
+        # Post intervention
+        h_pitch = notes_logits
+        if self.args['det_cheese_softmax_logits']:
+            h_pitch = torch.nn.functional.softmax(h_pitch, dim=-1)
+        h_pitch = self.adaptor_out(h_pitch)
 
         if skip_only:
             # Train only the skip adaptor
@@ -238,6 +243,8 @@ class DeterministicCheeseburger(lightning.LightningModule):
 
         x = self.pitch_lm.gpt(notes).last_hidden_state
         x = self.pitch_lm.lm_head(x)
+        if self.args['det_cheese_softmax_logits']:
+            x = torch.nn.functional.softmax(x, dim=-1)
         x = self.adaptor_out(x)
 
         x = self.wav_lm.gpt.forward_after(overwrite_hidden_states=x, inputs_embeds=x).last_hidden_state

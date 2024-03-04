@@ -186,6 +186,7 @@ if __name__ == '__main__':
     parser.add_argument('--det_cheese_pitch_lm_checkpoint', default='../pretrained/deterministic/pitch_lm.ckpt', type=str)
     parser.add_argument('--det_cheese_insertion_layer', default=5, type=int)
     parser.add_argument('--det_cheese_ce_weight', default=1, type=float)
+    parser.add_argument('--det_cheese_softmax_logits', action='store_true')
 
     # Training: Pitch_LM
     parser.add_argument('--pitch_lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])
@@ -206,27 +207,24 @@ if __name__ == '__main__':
         args.single_worker = True
 
         args.task = 'det_cheeseburger'
-        args.mode = 'predict_dev'
+        args.mode = 'train'
+        args.det_cheese_softmax_logits = True
+        args.training_mode = 'joint'
         
         args.batch_size = 5
         args.max_n_epochs = 4
 
-        args.checkpoint = '../results/runs/det_cheeseburger/skip_3e-4.ckpt'
-
-        args.intervention_mode = 'sample_patch'
-        args.intervention_step = 'last'
-
-
-    # for name in ['skip', 'joint', 'finetuned']:
-    #     for mode in ['', 'sample_patch', 'swap', '01']:
-    #         for step in ['last', 'all']:
-    #             if step == 'last' and mode in ['sample_patch', '']:
-    #                 continue
-    #             args.intervention_mode = mode
-    #             args.intervention_step = step
-    #             args.checkpoint = f'../results/runs/det_cheeseburger/{name}_3e-4.ckpt'
-    #             args.name = f'intervention_{name}_{mode}_{step}'
-    #             main(args)
-    # exit()
+        # for name in ['skip', 'finetuned', 'joint', 'noskip']:
+        #     # for mode in ['', 'sample_patch', 'swap', '01']:
+        #     for mode in ['01']:
+        #         for step in ['last', 'all']:
+        #             if step == 'last' and mode in ['sample_patch', '']:
+        #                 continue
+        #             args.intervention_mode = mode
+        #             args.intervention_step = step
+        #             args.checkpoint = f'../results/runs/det_cheeseburger/{name}_3e-4.ckpt'
+        #             args.name = f'{name}_{mode}_{step}'
+        #             main(args)
+        # exit()
 
     main(args)
