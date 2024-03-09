@@ -9,13 +9,14 @@ import lightning
 import utils.globals as uglobals
 import utils.logging_utils as logging_utils
 import utils.lightning_patch as lightning_patch
-from utils.wav_dataset import make_wav_loader
+from utils.wav_dataset import make_wav_loader, make_augmented_wav_loader
 
 from models.spectogram_rvqvae import Spectorgram_RVQVAE
 from models.audio_lm import AudioLM
 from models.cascading_audio_lm import CascadingAudioLM
 from models.deterministic_cheeseburger import DeterministicCheeseburger
 from models.deterministic_cheesebuger_adv import DeterministicCheeseburgerAdv
+from models.deterministic_cheesebuger_aug import DeterministicCheeseburgerAugZ, DeterministicCheeseburgerAugX
 from models.deterministic_wav_transformer import DeterministicWavTransformer
 from models.pitch_lm import PitchLM
 
@@ -94,6 +95,18 @@ def main(args):
         dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker)
         test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         model = DeterministicCheeseburgerAdv(vars(args), sr)
+    elif args.task == 'det_cheeseburger_aug_z':
+        sr = 16000
+        train_loader = make_augmented_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size//3, sr, shuffle=True, single_worker=args.single_worker)
+        dev_loader = make_augmented_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size//3, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker)
+        test_loader = make_augmented_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size//3, sr, shuffle=False, single_worker=args.single_worker)
+        model = DeterministicCheeseburgerAugZ(vars(args), sr)
+    elif args.task == 'det_cheeseburger_aug_x':
+        sr = 16000
+        train_loader = make_augmented_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size//3, sr, shuffle=True, single_worker=args.single_worker)
+        dev_loader = make_augmented_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size//3, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker)
+        test_loader = make_augmented_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size//3, sr, shuffle=False, single_worker=args.single_worker)
+        model = DeterministicCheeseburgerAugX(vars(args), sr)
     elif args.task == 'det_wav_tf':
         sr = 16000
         train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker)
@@ -172,9 +185,8 @@ if __name__ == '__main__':
     parser.add_argument('--force_cpu', action='store_true')
     parser.add_argument('--nondeterministic', action='store_true')
 
-    
     # Formulation
-    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm', 'det_cheeseburger', 'det_cheeseburger_adv', 'det_wav_tf', 'pitch_lm'])
+    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm', 'det_cheeseburger', 'det_cheeseburger_adv', 'det_cheeseburger_adv', 'det_wav_tf', 'pitch_lm'])
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'test_dev', 'predict_dev'])
 
     # Training
@@ -213,6 +225,11 @@ if __name__ == '__main__':
     parser.add_argument('--det_cheese_softmax_logits', action='store_true')
     parser.add_argument('--det_cheese_adv_weight', default=1, type=float)
 
+    parser.add_argument('--det_cheese_aug_z_timbre_weight', default=1, type=float)
+    parser.add_argument('--det_cheese_aug_z_pitch_weight', default=1, type=float)
+    parser.add_argument('--det_cheese_aug_x_weight', default=1, type=float)
+    parser.add_argument('--det_cheese_aug_x_no_pitch_model', action='store_true')
+
     # Training: Pitch_LM
     parser.add_argument('--pitch_lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])
 
@@ -232,16 +249,17 @@ if __name__ == '__main__':
         args.experiment_group = 'debug'
         args.single_worker = True
 
-        args.task = 'det_cheeseburger_adv'
+        args.task = 'det_cheeseburger_aug_x'
         args.mode = 'train'
-        # args.det_cheese_softmax_logits = True
-        args.training_mode = 'joint'
-        args.checkpoint = '../results/runs/det_cheeseburger/finetuned_softmax_3e-4.ckpt'
-        args.no_stict_loading = True
-        args.reinit_optimizers = True
         
-        args.batch_size = 5
-        args.max_n_epochs = 400
+        args.training_mode = 'joint'
+        args.det_cheese_aug_x_no_pitch_model = True
+        # args.checkpoint = '../results/runs/det_cheeseburger/finetuned_softmax_3e-4.ckpt'
+        # args.no_stict_loading = True
+        # args.reinit_optimizers = True
+        
+        args.batch_size = 6
+        args.max_n_epochs = 4
 
         # for name in ['skip', 'finetuned', 'joint']:
         #     for mode in ['', 'sample_patch', 'swap', '+-1e6']:

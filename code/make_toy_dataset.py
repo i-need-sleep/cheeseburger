@@ -34,7 +34,7 @@ def augment_midi(in_folder, out_folder, transpose_down, transpose_up):
             out_midi.write(os.path.join(out_folder, f'{file_name[:-4]}_{i}.mid'))
     return
 
-def render_midi(in_folder, out_folder, sr, total_time):
+def render_midi(in_folder, out_folder, sr, total_time, flat_velo=False):
     # Render MIDI files as WAV files
     # Apply a velocity curve
     # Syntehsize for all instruments
@@ -44,7 +44,8 @@ def render_midi(in_folder, out_folder, sr, total_time):
         
         # Velocity
         notes = midi.instruments[0].notes
-        notes = apply_velo(notes)
+        if not flat_velo:
+            notes = apply_velo(notes)
         
         # Instruments
         for instrument_program in range(128):
@@ -155,6 +156,6 @@ def get_normalization_factors(train_pt, wav_dir, sr, batch_size):
 if __name__ == '__main__':
     # Scale runs
     # augment_midi(uglobals.TOY_MIDI_PROTOTYPES_DIR, uglobals.TOY_MIDI_AUGMENTED_DIR, -24, 24)
-    # render_midi(uglobals.TOY_16K_MIDI_AUGMENTED_DIR, uglobals.TOY_16K_WAV_DIR, sr=16000, total_time=4)
+    render_midi(uglobals.TOY_16K_MIDI_AUGMENTED_DIR, uglobals.TOY_16K_FLAT_VELO_WAV_DIR, sr=16000, total_time=4, flat_velo=True)
     # make_splits(uglobals.TOY_MIDI_AUGMENTED_DIR, uglobals.TOY_TRAINING_DIR, 0.1, 0.1)
-    get_normalization_factors(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, 16000, 32)
+    # get_normalization_factors(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_WAV_DIR, 16000, 32)
