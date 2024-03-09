@@ -5,38 +5,14 @@ from copy import deepcopy
 from scipy.io.wavfile import write as wav_write
 
 import torch
-import torchaudio
 import lightning
 from lightning.pytorch.utilities import grad_norm
-import transformers
 
 from models.deterministic_wav_transformer import DeterministicWavTransformer
 from models.pitch_lm import PitchLM
 import models.modeling_utils.gpt_partial_forward_patch as gpt_patch
+from models.modeling_utils.adaptor import Adaptor
 
-class Adaptor(torch.nn.Module):
-    def __init__(self, in_dim, out_dim):
-        super().__init__()
-        self.config = self.get_config()
-
-        self.gpt = transformers.AutoModel.from_config(self.config)
-        self.linear_in = torch.nn.Linear(in_dim, self.config.n_embd)
-        self.linear_out = torch.nn.Linear(self.config.n_embd, out_dim)
-        
-    def get_config(self):
-        # Modify the config of a distill-gpt2 model
-        config = transformers.AutoConfig.from_pretrained('distilgpt2')
-        config.n_embd = 256
-        config.n_head = 4
-        config.n_layer = 3        
-        return config
-    
-    def forward(self, x):
-        x = self.linear_in(x)
-        x = self.gpt(inputs_embeds=x).last_hidden_state
-        x = self.linear_out(x)
-        return x
-    
 class DeterministicCheeseburger(lightning.LightningModule):
     def __init__(self, args, sr):
         super().__init__()
@@ -129,6 +105,30 @@ class DeterministicCheeseburger(lightning.LightningModule):
         notes_logits = self.pitch_lm.lm_head(x)
 
         # Intervention
+        notes_logits = self.apply_intervention(notes_logits)
+
+        # Post intervention
+        h_pitch = notes_logits
+        if self.args['det_cheese_softmax_logits']:
+            h_pitch = torch.nn.functional.softmax(h_pitch, dim=-1)
+        h_pitch = self.adaptor_out(h_pitch)
+
+        if skip_only:
+            # Train only the skip adaptor
+            h_pitch = h_pitch.detach()
+            notes_logits = notes_logits.detach()
+
+        # Merged branch
+        x = h_pitch + h_skip
+        x = self.wav_lm.gpt.forward_after(overwrite_hidden_states=x, inputs_embeds=x).last_hidden_state
+        
+        # Decode
+        x = x.reshape(batch_size * seq_len, -1, 1, 1) # [batch_size * seq_len, emb_size, 1, 1]
+        x = self.wav_lm.decoder(x)
+        x = x.reshape(batch_size, seq_len, x.shape[2], x.shape[3]) # [batch_size, seq_len, 128, 16]
+        return x, notes_logits
+    
+    def apply_intervention(self, notes_logits):
         try:
             self.intervention_mode
         except AttributeError:
@@ -161,29 +161,12 @@ class DeterministicCheeseburger(lightning.LightningModule):
                         elif self.intervention_mode == '01':
                             notes_logits[i, j, :] = 0
                             notes_logits[i, j, 60] = 1
+                        elif self.intervention_mode == '+-1e6':
+                            notes_logits[i, j, :] = -1e6
+                            notes_logits[i, j, 60] = 1e6
                         else:
                             raise NotImplementedError
-
-        # Post intervention
-        h_pitch = notes_logits
-        if self.args['det_cheese_softmax_logits']:
-            h_pitch = torch.nn.functional.softmax(h_pitch, dim=-1)
-        h_pitch = self.adaptor_out(h_pitch)
-
-        if skip_only:
-            # Train only the skip adaptor
-            h_pitch = h_pitch.detach()
-            notes_logits = notes_logits.detach()
-
-        # Merged branch
-        x = h_pitch + h_skip
-        x = self.wav_lm.gpt.forward_after(overwrite_hidden_states=x, inputs_embeds=x).last_hidden_state
-        
-        # Decode
-        x = x.reshape(batch_size * seq_len, -1, 1, 1) # [batch_size * seq_len, emb_size, 1, 1]
-        x = self.wav_lm.decoder(x)
-        x = x.reshape(batch_size, seq_len, x.shape[2], x.shape[3]) # [batch_size, seq_len, 128, 16]
-        return x, notes_logits
+        return notes_logits
     
     def joint_loss_and_log(self, spectrogram_pred, spectrogram_target, notes_logits, notes_target, batch_size, log_name, skip_only=False):
         mse = torch.nn.MSELoss()(spectrogram_pred, spectrogram_target)
