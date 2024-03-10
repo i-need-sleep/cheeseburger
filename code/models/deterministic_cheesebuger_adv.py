@@ -114,7 +114,7 @@ class DeterministicCheeseburgerAdv(DeterministicCheeseburger):
             spectrogram_pred = self.post_branch_forward(notes_in)
             loss = self.post_branch_loss_and_log(spectrogram_pred, spectrogram_target, batch_size, name)
         elif self.training_mode == 'skip_branch':
-            spectrogram_pred, notes_logits = self.joint_forward(spectrogram_in, skip_only=True)
+            spectrogram_pred, notes_logits, adv_logits = self.joint_forward(spectrogram_in, skip_only=True)
             loss = self.joint_loss_and_log(spectrogram_pred, spectrogram_target, notes_logits, notes_target, batch_size, name, skip_only=True)
         else:
             raise NotImplementedError
