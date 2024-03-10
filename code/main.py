@@ -146,7 +146,8 @@ def main(args):
         enable_progress_bar=args.single_worker,
         log_every_n_steps=len(train_loader)//5 if not args.debug else 1, # Log 5 times per epoch
         callbacks=[checkpoint_callback],
-        inference_mode=False if (args.task in['spectrogram_rvqvae', 'det_cheeseburger', 'audio_lm', 'det_wav_tf'] and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
+        # inference_mode=False if (args.task in['spectrogram_rvqvae', 'det_cheeseburger', 'audio_lm', 'det_wav_tf'] and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
+        inference_mode=False if args.mode=='predict_dev' else True, # Enable grad for reverse mel spectrogram transforms
         limit_train_batches=3 if args.debug else 1.0,
         limit_val_batches=3 if args.debug else 1.0,
         limit_test_batches=3 if args.debug else 1.0,
@@ -283,5 +284,9 @@ if __name__ == '__main__':
         #             args.name = f'{name}_{mode}_{step}'
         #             main(args)
         # exit()
+
+        # args.intervention_mode = 'sample_patch'
+        # args.intervention_step = 'all'
+        # args.checkpoint = f'../results/runs/det_cheeseburger/unsup_poc.ckpt'
 
     main(args)

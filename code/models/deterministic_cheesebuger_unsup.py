@@ -124,7 +124,7 @@ class DeterministicCheeseburgerUnsupervised(DeterministicCheeseburger):
 
         if self.training_mode == 'joint':
             # Split the batch
-            spectrogram_size = batch_size // 2
+            spectrogram_size = batch_size // 10 # EDIT ME
             notes_size = batch_size - spectrogram_size
             spectrogram_in = spectrogram_in[:spectrogram_size]
             spectrogram_target = spectrogram_target[:spectrogram_size]
@@ -147,7 +147,7 @@ class DeterministicCheeseburgerUnsupervised(DeterministicCheeseburger):
         notes_in = notes_in[:, 1: 1 + self.test_context_len] # Remove the BoS token
         
         while spectrogram_in.shape[1] < seq_len:
-            spectrogram_pred, notes_logits, _, _ = self.joint_forward_plain(deepcopy(spectrogram_in.detach()))
+            spectrogram_pred, notes_logits = self.joint_forward_plain(deepcopy(spectrogram_in.detach()))
             notes_pred = notes_logits.argmax(-1)
             spectrogram_in = torch.cat([spectrogram_in, spectrogram_pred[:, -1:]], dim=1).detach()
             notes_in = torch.cat([notes_in, notes_pred[:, -1:]], dim=1).detach()
