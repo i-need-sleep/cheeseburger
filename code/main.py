@@ -186,7 +186,7 @@ if __name__ == '__main__':
     parser.add_argument('--nondeterministic', action='store_true')
 
     # Formulation
-    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm', 'det_cheeseburger', 'det_cheeseburger_adv', 'det_cheeseburger_adv', 'det_wav_tf', 'pitch_lm'])
+    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm', 'det_cheeseburger', 'det_cheeseburger_adv', 'det_cheeseburger_aug_x', 'det_cheeseburger_aug_z', 'det_wav_tf', 'pitch_lm'])
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'test_dev', 'predict_dev'])
 
     # Training
