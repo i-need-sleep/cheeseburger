@@ -48,7 +48,7 @@ class DeterministicCheeseburgerAdv(DeterministicCheeseburger):
 
         # Adversarial branch
         h_adv = grad_reverse(h_skip)
-        adv_logits = self.pitch_adversary(h_adv) # TODO
+        adv_logits = self.pitch_adversary(h_adv)
 
         # Pitch branch
         x = self.adaptor_in(x)
