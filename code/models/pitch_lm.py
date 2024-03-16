@@ -68,6 +68,16 @@ class PitchLM(lightning.LightningModule):
             next_note = logits[:, -1].argmax(-1, keepdim=True)
             notes = torch.cat([notes, next_note], dim=1)
         return notes
+    
+    def infer_ancestral_sampling(self, notes, context_len):
+        seq_len = notes.shape[1]
+        notes = notes[:, :context_len + 1] # Consider the BoS
+        
+        while notes.shape[1] < seq_len + 1:
+            logits = self(notes)
+            next_note = torch.multinomial(logits[:, -1].softmax(-1), 1)
+            notes = torch.cat([notes, next_note], dim=1)
+        return notes
 
     # Training
     def training_step(self, batch, batch_idx):

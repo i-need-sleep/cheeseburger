@@ -20,6 +20,7 @@ from models.deterministic_cheesebuger_aug import DeterministicCheeseburgerAugZ, 
 from models.deterministic_cheesebuger_unsup import DeterministicCheeseburgerUnsupervised
 from models.deterministic_wav_transformer import DeterministicWavTransformer
 from models.pitch_lm import PitchLM
+from models.unsupervised_transcription_vq import UnsupervisedTranscriptionVQ
 
 def main(args):
     # The default temp dir does not work on the cluster
@@ -126,6 +127,14 @@ def main(args):
         dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker)
         test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker)
         model = PitchLM(vars(args))
+    elif args.task == 'unsupervised_transcription_vq':
+        sr = 16000
+        train_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size, sr, shuffle=True, single_worker=args.single_worker, single_instrument=True)
+        # dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/dev_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker, single_instrument=True)
+        # Unsupervised setup: Test on the training set
+        dev_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/train_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size, sr, shuffle=args.mode=='predict_dev', single_worker=args.single_worker, single_instrument=True)
+        test_loader = make_wav_loader(f'{uglobals.TOY_16K_TRAINING_DIR}/test_midi.pt', uglobals.TOY_16K_FLAT_VELO_WAV_DIR, args.batch_size, sr, shuffle=False, single_worker=args.single_worker, single_instrument=True)
+        model = UnsupervisedTranscriptionVQ(vars(args), sr=sr)
     else:
         raise NotImplementedError
     
@@ -144,7 +153,8 @@ def main(args):
         deterministic=not args.nondeterministic,
         num_sanity_val_steps=1,
         enable_progress_bar=args.single_worker,
-        log_every_n_steps=len(train_loader)//5 if not args.debug else 1, # Log 5 times per epoch
+        # log_every_n_steps=len(train_loader)//5 if not args.debug else 1, # Log 5 times per epoch
+        log_every_n_steps=1, 
         callbacks=[checkpoint_callback],
         # inference_mode=False if (args.task in['spectrogram_rvqvae', 'det_cheeseburger', 'audio_lm', 'det_wav_tf'] and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
         inference_mode=False if args.mode=='predict_dev' else True, # Enable grad for reverse mel spectrogram transforms
@@ -183,7 +193,7 @@ if __name__ == '__main__':
     parser.add_argument('--experiment_group', type=str, default='unnamed')
 
     # Checkpointing
-    parser.add_argument('--force_restart_training', action='store_true') # Otherwise, automatically resume the last checkpoint
+    parser.add_argument('--force_restart_training', action='store_true') # Otherwise, automatically resume from the last checkpoint
     parser.add_argument('--no_stict_loading', action='store_true')
     parser.add_argument('--reinit_optimizers', action='store_true')
 
@@ -194,7 +204,8 @@ if __name__ == '__main__':
     parser.add_argument('--nondeterministic', action='store_true')
 
     # Formulation
-    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm', 'det_cheeseburger', 'det_cheeseburger_adv', 'det_cheeseburger_aug_x', 'det_cheeseburger_aug_z', 'det_cheeseburger_unsup', 'det_wav_tf', 'pitch_lm'])
+    parser.add_argument('--task', type=str, default=None, choices=['spectrogram_rvqvae', 'audio_lm', 'cascade_audio_lm', 'det_cheeseburger', 'det_cheeseburger_adv', \
+                        'det_cheeseburger_aug_x', 'det_cheeseburger_aug_z', 'det_cheeseburger_unsup', 'det_wav_tf', 'pitch_lm', 'unsupervised_transcription_vq'])
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'test_dev', 'predict_dev'])
 
     # Training
@@ -243,6 +254,10 @@ if __name__ == '__main__':
     parser.add_argument('--det_cheese_unsup_cov_weight', default=1, type=float)
     parser.add_argument('--det_cheese_unsup_cov_margin', default=10, type=float)
 
+    # Training: Unsupervised transcription VQ
+    parser.add_argument('--unsupervised_transcription_vq_n_samples', default=32, type=int)
+    parser.add_argument('--unsupervised_transcription_vq_loss_weight', default=1, type=float)
+
     # Training: Pitch_LM
     parser.add_argument('--pitch_lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])
 
@@ -258,32 +273,29 @@ if __name__ == '__main__':
     args.uglobals = logging_utils.module_to_dict(uglobals)
 
     if args.debug:
-        args.name = 'debug'
-        args.experiment_group = 'debug'
+        args.name = '3e-4_plain_vq_unmodified_vq10'
+        args.experiment_group = 'poc'
         args.single_worker = True
+        args.debug = False
 
-        args.task = 'det_cheeseburger_unsup'
+        args.task = 'unsupervised_transcription_vq'
         args.mode = 'train'
         
-        args.training_mode = 'joint'
-        # args.checkpoint = '../results/runs/det_cheeseburger/finetuned_softmax_3e-4.ckpt'
-        # args.no_stict_loading = True
-        # args.reinit_optimizers = True
-        
-        args.batch_size = 6
-        args.max_n_epochs = 40
+        args.batch_size = 64
+        args.max_n_epochs = 150
 
+        args.lr = 3e-4
+        args.unsupervised_transcription_vq_loss_weight = 10
+        args.unsupervised_transcription_vq_n_samples = 1
         # for name in ['skip', 'finetuned', 'joint']:
+        # for name in ['joint_adv1_3e-4', 'joint_adv10_3e-4']:
         #     for mode in ['', 'sample_patch', 'swap', '+-1e6']:
-        #         for step in ['last', 'all']:
-        #             if step == 'last' and mode in ['sample_patch', '']:
-        #                 continue
+        #         for step in ['all']:
         #             args.intervention_mode = mode
         #             args.intervention_step = step
-        #             args.checkpoint = f'../results/runs/det_cheeseburger/{name}_softmax_3e-4.ckpt'
+        #             args.checkpoint = f'../results/runs/det_cheeseburger_checkpoints/{name}.ckpt'
         #             args.name = f'{name}_{mode}_{step}'
         #             main(args)
-        # exit()
 
         # args.intervention_mode = 'sample_patch'
         # args.intervention_step = 'all'
