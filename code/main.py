@@ -257,6 +257,7 @@ if __name__ == '__main__':
     # Training: Unsupervised transcription VQ
     parser.add_argument('--unsupervised_transcription_vq_n_samples', default=32, type=int)
     parser.add_argument('--unsupervised_transcription_vq_loss_weight', default=1, type=float)
+    parser.add_argument('--unsupervised_transcription_vq_codebook_size_factor', default=1, type=int)
 
     # Training: Pitch_LM
     parser.add_argument('--pitch_lm_config', type=str, default='distilgpt2', choices=['distilgpt2', 'gpt2', 'gpt2-medium', 'gpt2-large'])

@@ -112,7 +112,7 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
 
         # Modeling: Custom VQ layer
         # self.vq = RerankVQ(dim=768, codebook_size=self.pitch_lm.gpt_config.vocab_size)
-        self.vq = VectorQuantize(dim=768, codebook_size=self.pitch_lm.gpt_config.vocab_size)
+        self.vq = VectorQuantize(dim=768, codebook_size=int(self.pitch_lm.gpt_config.vocab_size * self.args['unsupervised_transcription_vq_codebook_size_factor']))
 
         # Initialize the output folder
         self.output_folder = f'{args["uglobals"]["OUTPUTS_DIR"]}/{args["task"]}/{args["name"]}'
