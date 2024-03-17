@@ -24,7 +24,7 @@ def gumbel_sample_topk(
     else:
         sampling_logits = logits
 
-    ind = sampling_logits.argmax(dim = dim)
+    # ind = sampling_logits.argmax(dim = dim)
     ind = torch.topk(sampling_logits, k+1, dim = dim).indices[:, :, k] # TODO: Make this more efficient
     one_hot = F.one_hot(ind, size).type(dtype)
 
@@ -536,14 +536,16 @@ class RerankVQ(nn.Module):
         )
 
         # quantize
+
         quantize, embed_ind, distances = self._codebook(x, k=k)
         return quantize, embed_ind, distances
 
-    def forward_post_quantize(self, x, x_overwrite, quantize_overwrite, indices_overwrite, distances_overwrite, 
+    def forward_post_quantize(self, x, quantize_overwrite, indices_overwrite, distances_overwrite, 
         indices = None,
         mask = None,
         sample_codebook_temp = None,
         freeze_codebook = False):
+
         orig_input = x
 
         only_one = x.ndim == 2
@@ -587,12 +589,32 @@ class RerankVQ(nn.Module):
             mask = mask,
             freeze_codebook = freeze_codebook
         )
-    
-        # Overwrite
-        x = x_overwrite
-        quantize = quantize_overwrite
-        embed_ind = indices_overwrite
-        distances = distances_overwrite
+
+        # quantize
+        quantize, embed_ind, distances = quantize_overwrite, indices_overwrite, distances_overwrite
+
+        # one step in-place update
+
+        if should_inplace_optimize and self.training and not freeze_codebook:
+
+            if exists(mask):
+                loss = F.mse_loss(quantize, x.detach(), reduction = 'none')
+
+                loss_mask = mask
+                if is_multiheaded:
+                    loss_mask = repeat(mask, 'b n -> c (b h) n', c = loss.shape[0], h = loss.shape[1] // mask.shape[0])
+
+                loss = loss[loss_mask].mean()
+
+            else:
+                loss = F.mse_loss(quantize, x.detach())
+
+            loss.backward()
+            self.in_place_codebook_optimizer.step()
+            self.in_place_codebook_optimizer.zero_grad()
+
+            # quantize again
+            quantize, embed_ind, distances = quantize_overwrite, indices_overwrite, distances_overwrite
 
         if self.training:
             # determine code to use for commitment loss
@@ -730,6 +752,7 @@ class RerankVQ(nn.Module):
         return quantize, embed_ind, loss
     
     def forward_topk(self, x, topk, scoring_func):
+        # TODO: Beam search
         for k in range(topk):
             quantize, embed_ind, distances = self.forward_pre_quantize(x, k)
             scores = scoring_func(embed_ind)
@@ -744,6 +767,6 @@ class RerankVQ(nn.Module):
                 best_quantize[to_update] = quantize[to_update]
                 best_embed_ind[to_update] = embed_ind[to_update]
                 best_distances[:, to_update] = distances[:, to_update]
-
-        quantize, embed_ind, loss = self.forward_post_quantize(x, x, best_quantize, best_embed_ind, best_distances)
+                
+        quantize, embed_ind, loss = self.forward_post_quantize(x, best_quantize, best_embed_ind, best_distances)
         return quantize, embed_ind, loss

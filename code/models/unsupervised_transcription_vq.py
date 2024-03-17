@@ -111,8 +111,8 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         self.pitch_lm.freeze()
 
         # Modeling: Custom VQ layer
-        # self.vq = RerankVQ(dim=768, codebook_size=self.pitch_lm.gpt_config.vocab_size)
-        self.vq = VectorQuantize(dim=768, codebook_size=int(self.pitch_lm.gpt_config.vocab_size * self.args['unsupervised_transcription_vq_codebook_size_factor']))
+        self.vq = RerankVQ(dim=768, codebook_size=int(self.pitch_lm.gpt_config.vocab_size * self.args['unsupervised_transcription_vq_codebook_size_factor']))
+        # self.vq = VectorQuantize(dim=768, codebook_size=int(self.pitch_lm.gpt_config.vocab_size * self.args['unsupervised_transcription_vq_codebook_size_factor']))
 
         # Initialize the output folder
         self.output_folder = f'{args["uglobals"]["OUTPUTS_DIR"]}/{args["task"]}/{args["name"]}'
@@ -181,8 +181,8 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         x = self.encoder(x)
         x = x.squeeze()
         
-        # quantized, embed_ind, vq_loss = self.rerank_vq.forward_topk(x, self.args['unsupervised_transcription_vq_n_samples'], self.get_pitch_lm_score)
-        quantized, embed_ind, vq_loss = self.vq(x)
+        quantized, embed_ind, vq_loss = self.vq.forward_topk(x, self.args['unsupervised_transcription_vq_n_samples'], self.get_pitch_lm_score)
+        # quantized, embed_ind, vq_loss = self.vq(x)
 
         quantized = quantized.unsqueeze(-1).unsqueeze(-1)
         x_hat = self.decoder(quantized)
@@ -205,7 +205,6 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         self.log(f'{log_name}/loss', loss, batch_size=batch_size)
         self.log(f'{log_name}/mse', mse, batch_size=batch_size)
         self.log(f'{log_name}/vq_loss', vq_loss, batch_size=batch_size)
-        self.log(f'{log_name}/monitor', loss, batch_size=batch_size)
         self.log(f'{log_name}/accuracy', accuracy, batch_size=batch_size)
         self.log(f'{log_name}/monitor', accuracy, batch_size=batch_size) # Keep the best checkpoint based on this metric
 

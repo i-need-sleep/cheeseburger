@@ -274,7 +274,7 @@ if __name__ == '__main__':
     args.uglobals = logging_utils.module_to_dict(uglobals)
 
     if args.debug:
-        args.name = '3e-4_plain_vq_unmodified_vq10'
+        args.name = '3e-4_plain_vq_sanity'
         args.experiment_group = 'poc'
         args.single_worker = True
         args.debug = False
