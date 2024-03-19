@@ -274,32 +274,22 @@ if __name__ == '__main__':
     args.uglobals = logging_utils.module_to_dict(uglobals)
 
     if args.debug:
-        args.name = '3e-4_plain_vq_sanity'
+        args.name = 'sanity_codebook5'
         args.experiment_group = 'poc'
         args.single_worker = True
-        args.debug = False
+        # args.debug = False
 
         args.task = 'unsupervised_transcription_vq'
-        args.mode = 'train'
+        args.mode = 'predict_dev'
+        args.checkpoint = '../results/runs/unsupervised_transcription_vq/sanity_codebook5.ckpt'
         
-        args.batch_size = 64
+        args.batch_size = 4
         args.max_n_epochs = 150
 
         args.lr = 3e-4
-        args.unsupervised_transcription_vq_loss_weight = 10
-        args.unsupervised_transcription_vq_n_samples = 1
-        # for name in ['skip', 'finetuned', 'joint']:
-        # for name in ['joint_adv1_3e-4', 'joint_adv10_3e-4']:
-        #     for mode in ['', 'sample_patch', 'swap', '+-1e6']:
-        #         for step in ['all']:
-        #             args.intervention_mode = mode
-        #             args.intervention_step = step
-        #             args.checkpoint = f'../results/runs/det_cheeseburger_checkpoints/{name}.ckpt'
-        #             args.name = f'{name}_{mode}_{step}'
-        #             main(args)
 
-        # args.intervention_mode = 'sample_patch'
-        # args.intervention_step = 'all'
-        # args.checkpoint = f'../results/runs/det_cheeseburger/unsup_poc.ckpt'
+        args.unsupervised_transcription_vq_loss_weight = 1
+        args.unsupervised_transcription_vq_n_samples = 1
+        args.unsupervised_transcription_vq_codebook_size_factor = 5
 
     main(args)
