@@ -274,22 +274,22 @@ if __name__ == '__main__':
     args.uglobals = logging_utils.module_to_dict(uglobals)
 
     if args.debug:
-        args.name = 'sanity_codebook5'
+        args.name = 'sanity_weight0.001'
         args.experiment_group = 'poc'
         args.single_worker = True
         # args.debug = False
 
         args.task = 'unsupervised_transcription_vq'
         args.mode = 'predict_dev'
-        args.checkpoint = '../results/runs/unsupervised_transcription_vq/sanity_codebook5.ckpt'
+        args.checkpoint = '../results/runs/unsupervised_transcription_vq/sanity_weight0.001.ckpt'
         
         args.batch_size = 4
         args.max_n_epochs = 150
 
         args.lr = 3e-4
 
-        args.unsupervised_transcription_vq_loss_weight = 1
+        args.unsupervised_transcription_vq_loss_weight = 0.001
         args.unsupervised_transcription_vq_n_samples = 1
-        args.unsupervised_transcription_vq_codebook_size_factor = 5
+        args.unsupervised_transcription_vq_codebook_size_factor = 1
 
     main(args)
