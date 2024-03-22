@@ -255,7 +255,7 @@ if __name__ == '__main__':
     parser.add_argument('--det_cheese_unsup_cov_margin', default=10, type=float)
 
     # Training: Unsupervised transcription VQ
-    parser.add_argument('--unsupervised_transcription_vq_n_samples', default=32, type=int)
+    parser.add_argument('--unsupervised_transcription_vq_n_samples', default=8, type=int)
     parser.add_argument('--unsupervised_transcription_vq_loss_weight', default=1, type=float)
     parser.add_argument('--unsupervised_transcription_vq_codebook_size_factor', default=1, type=int)
 
@@ -274,14 +274,13 @@ if __name__ == '__main__':
     args.uglobals = logging_utils.module_to_dict(uglobals)
 
     if args.debug:
-        args.name = 'sanity_weight0.001'
+        args.name = 'debug'
         args.experiment_group = 'poc'
         args.single_worker = True
         # args.debug = False
 
         args.task = 'unsupervised_transcription_vq'
-        args.mode = 'predict_dev'
-        args.checkpoint = '../results/runs/unsupervised_transcription_vq/sanity_weight0.001.ckpt'
+        args.mode = 'train'
         
         args.batch_size = 4
         args.max_n_epochs = 150
@@ -289,7 +288,7 @@ if __name__ == '__main__':
         args.lr = 3e-4
 
         args.unsupervised_transcription_vq_loss_weight = 0.001
-        args.unsupervised_transcription_vq_n_samples = 1
-        args.unsupervised_transcription_vq_codebook_size_factor = 1
+        args.unsupervised_transcription_vq_n_samples = 8
+        args.unsupervised_transcription_vq_codebook_size_factor = 3
 
     main(args)

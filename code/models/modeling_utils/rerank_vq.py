@@ -394,7 +394,7 @@ class RerankVQ(nn.Module):
 
         self.sync_update_v = sync_update_v
 
-        # TODO: Change this
+        # Modified codebook
         codebook_class = EuclideanCodebookTopK
 
         gumbel_sample_fn = partial(
@@ -751,22 +751,26 @@ class RerankVQ(nn.Module):
 
         return quantize, embed_ind, loss
     
-    def forward_topk(self, x, topk, scoring_func):
+    def forward_topk(self, x, topk, search_func, seq_len):
         # TODO: Beam search
+        quantized_topk = []
+        embed_ind_topk = []
+        distances_topk = []
         for k in range(topk):
             quantize, embed_ind, distances = self.forward_pre_quantize(x, k)
-            scores = scoring_func(embed_ind)
-            if k == 0:
-                best_scores = scores
-                best_quantize = quantize
-                best_embed_ind = embed_ind
-                best_distances = distances
-            else:
-                to_update = scores > best_scores
-                best_scores[to_update] = scores[to_update]
-                best_quantize[to_update] = quantize[to_update]
-                best_embed_ind[to_update] = embed_ind[to_update]
-                best_distances[:, to_update] = distances[:, to_update]
-                
+            # quantize: [batch_size * seq_len, 1, dim]
+            # embed_ind: [batch_size * seq_len, 1]
+            # distances: [1, batch_size * seq_len, 1, codebook_size]
+            quantized_topk.append(quantize.unsqueeze(0))
+            embed_ind_topk.append(embed_ind.unsqueeze(0))
+            distances_topk.append(distances.unsqueeze(0))
+
+        quantized_topk = torch.cat(quantized_topk, dim=0).reshape([topk, -1, seq_len, 1, quantize.shape[-1]]) # [topk, batch_size, seq_len, 1, dim]
+        embed_ind_topk = torch.cat(embed_ind_topk, dim=0).reshape([topk, -1, seq_len, 1]) # [topk, batch_size, seq_len, 1]
+        distances_topk = torch.cat(distances_topk, dim=0).reshape([topk, 1, -1, seq_len, 1, distances.shape[-1]]) # [topk, 1, batch_size, seq_len, 1, codebook_size]
+        
+        # print(quantized_topk.shape, embed_ind_topk.shape, distances_topk.shape)
+        best_quantize, best_embed_ind, best_distances = search_func(quantized_topk, embed_ind_topk, distances_topk)
+
         quantize, embed_ind, loss = self.forward_post_quantize(x, best_quantize, best_embed_ind, best_distances)
         return quantize, embed_ind, loss

@@ -156,32 +156,71 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         return x
 
     # Forward passes, losses and inference
-    def get_pitch_lm_score(self, indices):
-        return torch.ones_like(indices)[:, 0]
-        # Zero pad
-        indices = torch.nn.functional.pad(indices, (1, 0), value=0)
-        
-        # Query the pitch LM to get the sequence-level probabilities
-        # TODO: Make this more efficient
-        for i in range(indices.shape[1] - 1):
-            logits = self.pitch_lm(indices[:, :i + 1])
-            probs = torch.nn.functional.softmax(logits, dim=-1)[:, -1, :] # [batch, 128]
+    def lm_score_beam_search(self, quantized_topk, embed_ind_topk, distances_topk):
+        # [topk, batch_size, seq_len, 1, dim]
+        # [topk, batch_size, seq_len, 1]
+        # [topk, 1, batch_size, seq_len, 1, codebook_size]
 
-            indices_slice = indices[:, i + 1] # [batch]\
-            probs = probs[range(probs.shape[0]), indices_slice]
+        # TODO: Make this more efficient
+        # TODO: Unit test this. Make sure this works as intended.
+
+        best_quantize = torch.zeros_like(quantized_topk[0]) # [batch_size, seq_len, 1, dim]
+        best_embed_ind = torch.zeros_like(embed_ind_topk[0]) # [batch_size, seq_len, 1]
+        best_distances = torch.zeros_like(distances_topk[0]) # [1, batch_size, seq_len, 1, codebook_size]
+        
+        for b_idx in range(quantized_topk.shape[1]):
+            beams = torch.zeros_like(embed_ind_topk[:1, b_idx, :1, 0]) # [1, 1]
+            logits = self.pitch_lm(beams)
+            probs = torch.nn.functional.softmax(logits, dim=-1)[:, -1, :] # [1, 128]
             
-            if i == 0:
-                probs_total = probs
-            else:
-                probs_total *= probs
+            topk_indices = (embed_ind_topk[:, b_idx, 0, 0] % 128).tolist()
+            beams = [[0] + [i] for i in topk_indices]
+            beam_probs = probs[[0 for _ in range(embed_ind_topk.shape[0])], topk_indices]
+
+            for s_idx in range(1, quantized_topk.shape[2]):
+                # Forward
+                beams = torch.tensor(beams).to(quantized_topk.device) # [topk, s_idx + 1]
+                logits = self.pitch_lm(beams)[:, -1, :] # [topk, 128]
+                probs = torch.nn.functional.softmax(logits, dim=-1) # [topk, 128]
+
+                # Consider only the topk indices
+                indices = embed_ind_topk[:, b_idx, s_idx, 0] % 128 # [topk]
+                beams = beams.tolist()
+                new_beams = []
+                new_beam_probs_list = []
+                for i, topk_idx in enumerate(indices):
+                    new_beams += [beam + [topk_idx.item()] for beam in beams]
+                    new_beam_probs = beam_probs * probs[:, topk_idx]
+                    new_beam_probs_list.append(new_beam_probs)
+                new_beam_probs = torch.cat(new_beam_probs_list, dim=0)
+
+                # Update the beams
+                topk_indices = torch.argsort(new_beam_probs, descending=True)[:quantized_topk.shape[0]]
+                beams = [new_beams[i] for i in topk_indices]
+                beam_probs = new_beam_probs[topk_indices]
             
-        return probs_total
+            beam = beams[0]
+
+            # Resolve the best sequence of quantized values
+            for step, idx in enumerate(beam[1: ]):
+                for k in range(quantized_topk.shape[0]):
+                    if embed_ind_topk[k, b_idx, step, 0] % 128 == idx:
+                        best_quantize[b_idx, step, 0] = quantized_topk[k, b_idx, step, 0]
+                        best_embed_ind[b_idx, step, 0] = embed_ind_topk[k, b_idx, step, 0]
+                        best_distances[0, b_idx, step, 0] = distances_topk[k, 0, b_idx, step, 0]
+                        break
+
+        # Merge the batch and seq_len dimensions
+        best_quantize = best_quantize.reshape(best_quantize.shape[0] * best_quantize.shape[1], 1, best_quantize.shape[3])
+        best_embed_ind = best_embed_ind.reshape(best_embed_ind.shape[0] * best_embed_ind.shape[1], 1)
+        best_distances = best_distances.reshape(1, best_distances.shape[1] * best_distances.shape[2], 1, best_distances.shape[4])
+        return best_quantize, best_embed_ind, best_distances
     
-    def forward(self, x):
+    def forward(self, x, seq_len):
         x = self.encoder(x)
         x = x.squeeze()
         
-        quantized, embed_ind, vq_loss = self.vq.forward_topk(x, self.args['unsupervised_transcription_vq_n_samples'], self.get_pitch_lm_score)
+        quantized, embed_ind, vq_loss = self.vq.forward_topk(x, self.args['unsupervised_transcription_vq_n_samples'], self.lm_score_beam_search, seq_len)
         # quantized, embed_ind, vq_loss = self.vq(x)
 
         # if no_vq:
@@ -198,10 +237,11 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         x = batch['wav']
         notes_target = batch['notes']
         batch_size = x.shape[0]
+        seq_len = x.shape[1]
         x = self.preprocess(x)
         y = torch.clone(x)
 
-        x_hat, quantized, embed_ind, vq_loss = self.forward(x)
+        x_hat, quantized, embed_ind, vq_loss = self.forward(x, seq_len)
 
         mse = torch.nn.MSELoss()(x_hat, y)
         loss = mse + self.args['unsupervised_transcription_vq_loss_weight'] * vq_loss
@@ -213,9 +253,9 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         self.log(f'{log_name}/accuracy', accuracy, batch_size=batch_size)
         self.log(f'{log_name}/monitor', accuracy, batch_size=batch_size) # Keep the best checkpoint based on this metric
 
-        # if batch_idx == 0 and log_name=='val':
-        #     print('VQ indices:\n', embed_ind.reshape(notes_target.shape)[:6])
-        #     print('GT notes:\n', notes_target[:6])
+        if batch_idx == 0 and log_name=='val':
+            print('VQ indices:\n', embed_ind.reshape(notes_target.shape)[:6])
+            print('GT notes:\n', notes_target[:6])
         return loss
 
     def batch_to_infer(self, batch):
