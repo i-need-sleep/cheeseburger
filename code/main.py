@@ -153,8 +153,8 @@ def main(args):
         deterministic=not args.nondeterministic,
         num_sanity_val_steps=1,
         enable_progress_bar=args.single_worker,
-        # log_every_n_steps=len(train_loader)//5 if not args.debug else 1, # Log 5 times per epoch
-        log_every_n_steps=1, 
+        log_every_n_steps=len(train_loader)//5 if not args.debug else 1, # Log 5 times per epoch
+        # log_every_n_steps=1, 
         callbacks=[checkpoint_callback],
         # inference_mode=False if (args.task in['spectrogram_rvqvae', 'det_cheeseburger', 'audio_lm', 'det_wav_tf'] and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
         inference_mode=False if args.mode=='predict_dev' else True, # Enable grad for reverse mel spectrogram transforms
@@ -274,21 +274,23 @@ if __name__ == '__main__':
     args.uglobals = logging_utils.module_to_dict(uglobals)
 
     if args.debug:
-        args.name = 'debug'
-        args.experiment_group = 'poc'
+        args.name = 'ours'
+        args.experiment_group = 'debug'
         args.single_worker = True
         # args.debug = False
 
         args.task = 'unsupervised_transcription_vq'
         args.mode = 'train'
+
+        # args.checkpoint = '../results/runs/unsupervised_transcription_vq/ours_sanity.ckpt'
         
         args.batch_size = 4
-        args.max_n_epochs = 150
+        args.max_n_epochs = 3
 
         args.lr = 3e-4
 
         args.unsupervised_transcription_vq_loss_weight = 0.001
-        args.unsupervised_transcription_vq_n_samples = 8
-        args.unsupervised_transcription_vq_codebook_size_factor = 3
+        args.unsupervised_transcription_vq_n_samples = 1
+        args.unsupervised_transcription_vq_codebook_size_factor = 1
 
     main(args)

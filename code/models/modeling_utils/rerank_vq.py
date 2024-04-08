@@ -9,7 +9,9 @@ from vector_quantize_pytorch.vector_quantize_pytorch import default, partial, ex
 
 def gumbel_sample_topk(
     logits,
-    k,
+    notes,
+    infer,
+    # k,
     temperature = 1.,
     stochastic = False,
     straight_through = False,
@@ -25,7 +27,12 @@ def gumbel_sample_topk(
         sampling_logits = logits
 
     # ind = sampling_logits.argmax(dim = dim)
-    ind = torch.topk(sampling_logits, k+1, dim = dim).indices[:, :, k] # TODO: Make this more efficient
+    # ind = torch.topk(sampling_logits, k+1, dim = dim).indices[:, :, k] # TODO: Make this more efficient
+    # [1, batch_size * seq_len]
+    if not infer:
+        ind = notes.reshape(1, -1)
+    else:
+        ind = sampling_logits.argmax(dim = dim)
     one_hot = F.one_hot(ind, size).type(dtype)
 
     assert not (reinmax and not straight_through), 'reinmax can only be turned on if using straight through gumbel softmax'
@@ -249,7 +256,9 @@ class EuclideanCodebookTopK(nn.Module):
     def forward(
         self,
         x,
-        k,
+        notes,
+        infer,
+        # k,
         sample_codebook_temp = None,
         mask = None,
         freeze_codebook = False
@@ -282,7 +291,8 @@ class EuclideanCodebookTopK(nn.Module):
 
         dist = -cdist(flatten, embed)
 
-        embed_ind, embed_onehot = self.gumbel_sample(dist, k=k, dim = -1, temperature = sample_codebook_temp, training = self.training)
+        # embed_ind, embed_onehot = self.gumbel_sample(dist, k=k, dim = -1, temperature = sample_codebook_temp, training = self.training) # Modified
+        embed_ind, embed_onehot = self.gumbel_sample(dist, notes, infer, dim = -1, temperature = sample_codebook_temp, training = self.training) # Modified
 
         embed_ind = unpack_one(embed_ind, ps, 'h *')
 
@@ -485,7 +495,9 @@ class RerankVQ(nn.Module):
     def forward_pre_quantize(
         self,
         x,
-        k,
+        notes,
+        infer,
+        # k,
         indices = None,
         mask = None,
         sample_codebook_temp = None,
@@ -537,7 +549,8 @@ class RerankVQ(nn.Module):
 
         # quantize
 
-        quantize, embed_ind, distances = self._codebook(x, k=k)
+        # quantize, embed_ind, distances = self._codebook(x, k=k)
+        quantize, embed_ind, distances = self._codebook(x, notes, infer)
         return quantize, embed_ind, distances
 
     def forward_post_quantize(self, x, quantize_overwrite, indices_overwrite, distances_overwrite, 
@@ -752,7 +765,7 @@ class RerankVQ(nn.Module):
         return quantize, embed_ind, loss
     
     def forward_topk(self, x, topk, search_func, seq_len):
-        # TODO: Beam search
+        # TODO: Implement oracle, then debug beam search
         quantized_topk = []
         embed_ind_topk = []
         distances_topk = []
@@ -773,4 +786,11 @@ class RerankVQ(nn.Module):
         best_quantize, best_embed_ind, best_distances = search_func(quantized_topk, embed_ind_topk, distances_topk)
 
         quantize, embed_ind, loss = self.forward_post_quantize(x, best_quantize, best_embed_ind, best_distances)
+        return quantize, embed_ind, loss    
+    
+    def forward_oracle(self, x, notes, seq_len, infer):
+        
+        quantize, embed_ind, distances = self.forward_pre_quantize(x, notes, infer)
+
+        quantize, embed_ind, loss = self.forward_post_quantize(x, quantize, embed_ind, distances)
         return quantize, embed_ind, loss

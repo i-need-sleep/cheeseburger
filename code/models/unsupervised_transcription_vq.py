@@ -216,11 +216,13 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         best_distances = best_distances.reshape(1, best_distances.shape[1] * best_distances.shape[2], 1, best_distances.shape[4])
         return best_quantize, best_embed_ind, best_distances
     
-    def forward(self, x, seq_len):
+    def forward(self, x, notes, seq_len, infer):
         x = self.encoder(x)
         x = x.squeeze()
         
-        quantized, embed_ind, vq_loss = self.vq.forward_topk(x, self.args['unsupervised_transcription_vq_n_samples'], self.lm_score_beam_search, seq_len)
+        # quantized, embed_ind, vq_loss = self.vq.forward_topk(x, self.args['unsupervised_transcription_vq_n_samples'], self.lm_score_beam_search, seq_len)
+        quantized, embed_ind, vq_loss = self.vq.forward_oracle(x, notes, seq_len, infer)
+
         # quantized, embed_ind, vq_loss = self.vq(x)
 
         # if no_vq:
@@ -233,7 +235,7 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         x_hat = x_hat.reshape(x.shape[0], 1, 128, 16)
         return x_hat, quantized, embed_ind, vq_loss
 
-    def batch_to_loss(self, batch, log_name, batch_idx):
+    def batch_to_loss(self, batch, log_name, batch_idx, infer):
         x = batch['wav']
         notes_target = batch['notes']
         batch_size = x.shape[0]
@@ -241,7 +243,7 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         x = self.preprocess(x)
         y = torch.clone(x)
 
-        x_hat, quantized, embed_ind, vq_loss = self.forward(x, seq_len)
+        x_hat, quantized, embed_ind, vq_loss = self.forward(x, notes_target, seq_len, infer)
 
         mse = torch.nn.MSELoss()(x_hat, y)
         loss = mse + self.args['unsupervised_transcription_vq_loss_weight'] * vq_loss
@@ -262,20 +264,21 @@ class UnsupervisedTranscriptionVQ(lightning.LightningModule):
         x = batch['wav']
         notes_target = batch['notes']
         batch_size = x.shape[0]
+        seq_len = x.shape[1]
         x = self.preprocess(x)
         y = torch.clone(x)
 
-        x_hat, quantized, embed_ind, vq_loss = self.forward(x)
+        x_hat, quantized, embed_ind, vq_loss = self.forward(x, seq_len, infer=True)
 
         return x_hat.detach(), y.detach(), batch['wav'], embed_ind.reshape(batch_size, -1), notes_target
 
     # Step functions
     def training_step(self, batch, batch_idx):
-        loss = self.batch_to_loss(batch, 'train', batch_idx)
+        loss = self.batch_to_loss(batch, 'train', batch_idx, infer=False)
         return loss
     
     def eval_step(self, name, batch, batch_idx):
-        loss = self.batch_to_loss(batch, name, batch_idx)
+        loss = self.batch_to_loss(batch, name, batch_idx, infer=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
