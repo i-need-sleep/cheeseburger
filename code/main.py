@@ -153,7 +153,7 @@ def main(args):
         deterministic=not args.nondeterministic,
         num_sanity_val_steps=1,
         enable_progress_bar=args.single_worker,
-        log_every_n_steps=len(train_loader)//5 if not args.debug else 1, # Log 5 times per epoch
+        log_every_n_steps=max(len(train_loader)//5, 1) if not args.debug else 1, # Log 5 times per epoch
         # log_every_n_steps=1, 
         callbacks=[checkpoint_callback],
         # inference_mode=False if (args.task in['spectrogram_rvqvae', 'det_cheeseburger', 'audio_lm', 'det_wav_tf'] and args.mode=='predict_dev') else True, # Enable grad for reverse mel spectrogram transforms
